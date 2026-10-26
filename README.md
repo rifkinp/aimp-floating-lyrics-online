@@ -3,6 +3,7 @@
 <div align="center">
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+[![Latest Release](https://img.shields.io/github/v/release/rifkinp/aimp-floating-lyrics-online?style=for-the-badge&color=24C8D8&logo=github)](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/latest)
 ![Tauri](https://img.shields.io/badge/Tauri_v2-24C8D8?style=for-the-badge&logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust_Backend-DEA584?style=for-the-badge&logo=rust&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue_3-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
@@ -11,9 +12,22 @@
 
 **A modern, lightweight, transparent, always-on-top desktop lyrics overlay for AIMP Player with instant multi-provider fallback, bilingual translations, mini player controls, live seekbar, and in-app LRC editor.**
 
-[Fitur Utama](#-fitur-utama) • [Cara Menjalankan](#-cara-menjalankan-portable--standalone) • [Cara Kerja & Arsitektur](#-cara-kerja--arsitektur) • [Daftar Kontrol & Shortcut](#-daftar-kontrol--shortcut) • [Kompilasi dari Source](#-kompilasi-dari-source-code) • [FAQ & Troubleshooting](#-faq--troubleshooting)
+[⬇️ Download](#️-download) • [✨ Fitur Utama](#-fitur-utama) • [🚀 Cara Menjalankan](#-cara-menjalankan-portable--standalone) • [🛠 Cara Kerja & Arsitektur](#-cara-kerja--arsitektur) • [⌨ Kontrol & Shortcut](#-daftar-kontrol--shortcut) • [💻 Kompilasi Source](#-kompilasi-dari-source-code) • [❓ FAQ](#-faq--troubleshooting)
 
 </div>
+
+---
+
+## ⬇️ Download
+
+Versi rilis siap pakai (*portable*, tanpa perlu instalasi rumit) dapat langsung diunduh melalui tautan di bawah atau di halaman [**GitHub Releases**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases):
+
+| Versi | Tipe Berkas | Target Sistem | Tautan Unduhan Langsung | Ukuran |
+| :--- | :--- | :--- | :--- | :--- |
+| **v0.1.0 (Latest)** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 **AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.1.0/AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip) | ~8.3 MB |
+
+> [!TIP]
+> **Quick Start:** Cukup unduh paket zip di atas, ekstrak ke folder mana saja di komputer Anda, lalu jalankan `AIMP Floating Lyrics.exe`. Semua dependensi (termasuk WebView2Loader dan konfigurasi User-Agent) sudah siap digunakan!
 
 ---
 
@@ -69,14 +83,11 @@ Aplikasi mencari lirik dengan hierarki fallback otomatis tanpa jeda:
 
 Anda tidak perlu menginstal Node.js atau Rust untuk menjalankan aplikasi ini:
 
-1. Buka folder:
-   ```text
-   release/
-   ```
-2. Pastikan file berikut tetap berada dalam folder yang sama:
+1. Unduh paket dari [**Bagian Download**](#️-download) atau gunakan folder `release/`.
+2. Pastikan berkas-berkas berikut tetap berada dalam folder yang sama:
    - **`AIMP Floating Lyrics.exe`** *(Aplikasi utama)*
    - **`WebView2Loader.dll`** *(Pustaka runtime WebView2 untuk GUI Tauri)*
-   - **`.env`** *(File konfigurasi opsional untuk User-Agent LRCLIB)*
+   - **`.env`** *(Konfigurasi identitas User-Agent LRCLIB)*
 3. Jalankan **`AIMP Floating Lyrics.exe`**.
 4. Putar lagu apa saja di **AIMP Player** — lirik akan langsung terdeteksi, diunduh, dan tersinkronisasi!
 
