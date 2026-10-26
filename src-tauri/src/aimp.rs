@@ -11,7 +11,15 @@ use windows::Win32::System::Memory::{
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, SendMessageW};
 
 const WM_AIMP_PROPERTY: u32 = 0x0477; // WM_USER (0x0400) + 0x77
+const WM_AIMP_COMMAND: u32 = 0x0475;  // WM_USER (0x0400) + 0x75
+const AIMP_CMD_PLAY: usize = 1;
+const AIMP_CMD_PLAYPAUSE: usize = 2;
+const AIMP_CMD_PAUSE: usize = 3;
+const AIMP_CMD_STOP: usize = 4;
+const AIMP_CMD_NEXT: usize = 5;
+const AIMP_CMD_PREV: usize = 6;
 const AIMP_PROP_PLAYER_STATE: usize = 0x40; // 0 = Stopped, 1 = Paused, 2 = Playing
+const AIMP_PROP_PLAYER_VOLUME: usize = 0x30; // 0 - 100
 const AIMP_PROP_TRACK_POSITION: usize = 0x20; // in milliseconds
 const AIMP_PROP_TRACK_DURATION: usize = 0x10; // in milliseconds
 
@@ -336,6 +344,45 @@ pub fn seek_track(position_ms: u32) -> Result<(), String> {
             WM_AIMP_PROPERTY,
             WPARAM(AIMP_PROP_TRACK_POSITION | 1),
             LPARAM(position_ms as isize),
+        );
+        Ok(())
+    }
+}
+
+pub fn send_aimp_command(cmd: &str) -> Result<(), String> {
+    unsafe {
+        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
+            .map_err(|e| e.to_string())?;
+        if hwnd.0.is_null() {
+            return Err("AIMP window not found".to_string());
+        }
+        let code = match cmd {
+            "play" => AIMP_CMD_PLAY,
+            "playpause" | "toggle" => AIMP_CMD_PLAYPAUSE,
+            "pause" => AIMP_CMD_PAUSE,
+            "stop" => AIMP_CMD_STOP,
+            "next" => AIMP_CMD_NEXT,
+            "prev" => AIMP_CMD_PREV,
+            _ => return Err(format!("Unknown command: {}", cmd)),
+        };
+        SendMessageW(hwnd, WM_AIMP_COMMAND, WPARAM(code), LPARAM(0));
+        Ok(())
+    }
+}
+
+pub fn set_aimp_volume(volume: u32) -> Result<(), String> {
+    unsafe {
+        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
+            .map_err(|e| e.to_string())?;
+        if hwnd.0.is_null() {
+            return Err("AIMP window not found".to_string());
+        }
+        let clamped = volume.min(100);
+        SendMessageW(
+            hwnd,
+            WM_AIMP_PROPERTY,
+            WPARAM(AIMP_PROP_PLAYER_VOLUME | 1),
+            LPARAM(clamped as isize),
         );
         Ok(())
     }

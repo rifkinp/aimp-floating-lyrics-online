@@ -8,6 +8,7 @@ import LyricsDisplay from './components/LyricsDisplay.vue';
 import FullLyricsView from './components/FullLyricsView.vue';
 import ManualSearchModal from './components/ManualSearchModal.vue';
 import SettingsModal from './components/SettingsModal.vue';
+import LrcEditorModal from './components/LrcEditorModal.vue';
 import type {
   AimpTrackInfo,
   AimpPositionUpdate,
@@ -24,6 +25,8 @@ const lyrics = ref<ParsedLyrics | null>(null);
 const isLoading = ref(false);
 const isHovered = ref(false);
 const isLocked = ref(false);
+const albumArt = ref<string | null>(null);
+const showEditor = ref(false);
 
 const config = ref<AppConfig>({
   clickThrough: false,
@@ -108,6 +111,14 @@ onMounted(async () => {
         isLoading.value = true;
         lyrics.value = null;
 
+        try {
+          albumArt.value = await invoke<string | null>('get_album_art', {
+            filePath: event.payload.fileName,
+          });
+        } catch (_) {
+          albumArt.value = null;
+        }
+
         // Automatically resolve lyrics
         try {
           const result = await invoke<ParsedLyrics>('resolve_lyrics', {
@@ -186,6 +197,13 @@ onMounted(async () => {
       playbackState = cur.state;
       if (windowLabel === 'main') {
         isLoading.value = true;
+        try {
+          albumArt.value = await invoke<string | null>('get_album_art', {
+            filePath: cur.fileName,
+          });
+        } catch (_) {
+          albumArt.value = null;
+        }
         try {
           const result = await invoke<ParsedLyrics>('resolve_lyrics', {
             audioPath: cur.fileName,
@@ -289,6 +307,18 @@ const handleDock = async (position: string) => {
   }
 };
 
+const handleControlPlayback = async (command: string) => {
+  try {
+    await invoke('control_playback', { command });
+  } catch (err) {
+    console.error('Failed to control playback in AIMP:', err);
+  }
+};
+
+const onLyricsSaved = (updated: ParsedLyrics) => {
+  lyrics.value = updated;
+};
+
 const backgroundStyle = computed(() => {
   let opacity = config.value.backgroundOpacity ?? 0.15;
   if (!isLocked.value && isHovered.value) {
@@ -360,12 +390,18 @@ const hideCurrentWindow = async () => {
         :is-locked="isLocked"
         :show-full-lyrics="showFullLyrics"
         :dock-position="config.dockPosition || 'none'"
+        :album-art="albumArt"
+        :current-position-ms="positionMs"
+        :duration-ms="track?.durationMs || 0"
         @lock="toggleLock"
         @open-search="openSearchWindow"
         @open-settings="openSettingsWindow"
+        @open-editor="showEditor = true"
         @adjust-offset="handleAdjustOffset"
         @toggle-full-lyrics="showFullLyrics = !showFullLyrics"
         @dock="handleDock"
+        @control="handleControlPlayback"
+        @seek="handleSeekTrack"
       />
     </div>
 
@@ -391,4 +427,14 @@ const hideCurrentWindow = async () => {
       />
     </div>
   </main>
+
+  <!-- Quick LRC Editor Modal -->
+  <LrcEditorModal
+    v-if="showEditor"
+    :track="track"
+    :lyrics="lyrics"
+    :current-position-ms="positionMs"
+    @close="showEditor = false"
+    @saved="onLyricsSaved"
+  />
 </template>

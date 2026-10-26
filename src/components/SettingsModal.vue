@@ -65,6 +65,8 @@ const strokeColorPresets = [
   { name: 'White Glow', hex: '#FFFFFF' },
 ];
 
+const availableMonitors = ref<any[]>([]);
+
 const loadFreshConfig = async () => {
   try {
     const cfg = await invoke<AppConfig>('get_app_config');
@@ -80,6 +82,13 @@ const loadFreshConfig = async () => {
 
 onMounted(async () => {
   await loadFreshConfig();
+  try {
+    const monitors = await invoke<any[]>('get_available_monitors');
+    if (monitors && monitors.length > 0) {
+      availableMonitors.value = monitors;
+    }
+  } catch (_) {}
+
   try {
     await listen<AppConfig>('config://updated', (event) => {
       localConfig.value = { ...event.payload };
@@ -548,6 +557,21 @@ const resetDefaults = () => {
             {{ dock.label }}
           </button>
         </div>
+
+        <!-- Target Monitor Selector -->
+        <div v-if="availableMonitors.length > 1" class="space-y-1 pt-1.5">
+          <label class="text-[11px] font-semibold text-slate-400">Target Display Monitor:</label>
+          <select
+            v-model="localConfig.targetMonitor"
+            @change="handleSliderChange"
+            class="w-full bg-slate-800 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            <option :value="null">Default (Auto / Active Window Monitor)</option>
+            <option v-for="m in availableMonitors" :key="m.index" :value="m.index">
+              {{ m.name }} ({{ m.width }}x{{ m.height }}{{ m.isPrimary ? ' - Primary' : '' }})
+            </option>
+          </select>
+        </div>
       </div>
 
       <!-- Local File Auto-Save Toggle -->
@@ -989,6 +1013,21 @@ const resetDefaults = () => {
           >
             {{ dock.label }}
           </button>
+        </div>
+
+        <!-- Target Monitor Selector -->
+        <div v-if="availableMonitors.length > 1" class="space-y-1 pt-1.5">
+          <label class="text-[11px] font-semibold text-slate-400">Target Display Monitor:</label>
+          <select
+            v-model="localConfig.targetMonitor"
+            @change="handleSliderChange"
+            class="w-full bg-slate-800 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            <option :value="null">Default (Auto / Active Window Monitor)</option>
+            <option v-for="m in availableMonitors" :key="m.index" :value="m.index">
+              {{ m.name }} ({{ m.width }}x{{ m.height }}{{ m.isPrimary ? ' - Primary' : '' }})
+            </option>
+          </select>
         </div>
       </div>
 

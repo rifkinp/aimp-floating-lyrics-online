@@ -63,6 +63,7 @@ export interface AppConfig {
   backgroundOpacity?: number;
   enableGlassmorphism?: boolean;
   dockPosition?: 'none' | 'bottom-taskbar' | 'top-screen';
+  targetMonitor?: number | null;
 }
 
 export interface LrclibRecord {

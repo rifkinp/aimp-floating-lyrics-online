@@ -26,6 +26,7 @@ pub struct AppConfig {
     pub background_opacity: f64,  // 0.0 - 1.0
     pub enable_glassmorphism: bool,
     pub dock_position: String,    // "none" | "bottom-taskbar" | "top-screen"
+    pub target_monitor: Option<usize>,
 }
 
 impl Default for AppConfig {
@@ -52,6 +53,7 @@ impl Default for AppConfig {
             background_opacity: 0.15,
             enable_glassmorphism: true,
             dock_position: "none".to_string(),
+            target_monitor: None,
         }
     }
 }

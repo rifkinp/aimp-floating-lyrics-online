@@ -7,6 +7,7 @@ use aimp::{start_aimp_polling_task, AimpReader, AimpTrackInfo};
 use config::{load_config, save_config, AppConfig};
 use lrclib::{LrcManager, LrclibRecord};
 use parser::{parse_lrc, update_lrc_offset, ParsedLyrics};
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -184,6 +185,139 @@ fn adjust_offset(
     Ok(parsed)
 }
 
+fn to_base64(bytes: &[u8]) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as usize;
+        let b1 = chunk.get(1).copied().unwrap_or(0) as usize;
+        let b2 = chunk.get(2).copied().unwrap_or(0) as usize;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(CHARSET[(n >> 18) & 63] as char);
+        out.push(CHARSET[(n >> 12) & 63] as char);
+        if chunk.len() > 1 {
+            out.push(CHARSET[(n >> 6) & 63] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(CHARSET[n & 63] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+#[tauri::command]
+fn get_album_art(file_path: String) -> Option<String> {
+    if file_path.trim().is_empty() {
+        return None;
+    }
+    let p = std::path::Path::new(&file_path);
+    let parent = p.parent()?;
+    let stem = p.file_stem()?.to_string_lossy().to_string();
+
+    let candidates = [
+        format!("{}.jpg", stem),
+        format!("{}.png", stem),
+        "cover.jpg".to_string(),
+        "cover.png".to_string(),
+        "cover.jpeg".to_string(),
+        "folder.jpg".to_string(),
+        "folder.png".to_string(),
+        "albumart.jpg".to_string(),
+        "front.jpg".to_string(),
+        "front.png".to_string(),
+    ];
+
+    for name in &candidates {
+        let candidate_path = parent.join(name);
+        if candidate_path.exists() && candidate_path.is_file() {
+            if let Ok(bytes) = std::fs::read(&candidate_path) {
+                if bytes.len() <= 10 * 1024 * 1024 {
+                    let mime = if name.ends_with(".png") {
+                        "image/png"
+                    } else if name.ends_with(".webp") {
+                        "image/webp"
+                    } else {
+                        "image/jpeg"
+                    };
+                    return Some(format!("data:{};base64,{}", mime, to_base64(&bytes)));
+                }
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn control_playback(command: String) -> Result<(), String> {
+    aimp::send_aimp_command(&command)
+}
+
+#[tauri::command]
+fn set_aimp_volume(volume: u32) -> Result<(), String> {
+    aimp::set_aimp_volume(volume)
+}
+
+#[tauri::command]
+fn save_edited_lyrics(app: AppHandle, audio_path: String, raw_lrc: String) -> Result<ParsedLyrics, String> {
+    let parsed = parse_lrc(&raw_lrc);
+
+    if !audio_path.trim().is_empty() {
+        let p = std::path::Path::new(&audio_path);
+        if let Some(parent) = p.parent() {
+            if let Some(stem) = p.file_stem() {
+                let local_lrc_path = parent.join(format!("{}.lrc", stem.to_string_lossy()));
+                let _ = std::fs::write(&local_lrc_path, &raw_lrc);
+            }
+        }
+    }
+
+    let cache_dir = crate::config::get_cache_dir();
+    let sanitized_name = format!(
+        "{}_{}.lrc",
+        parsed.artist.as_deref().unwrap_or("unknown").replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_"),
+        parsed.title.as_deref().unwrap_or("track").replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
+    );
+    let _ = std::fs::write(cache_dir.join(sanitized_name), &raw_lrc);
+
+    let _ = app.emit("lyrics://loaded", &parsed);
+    Ok(parsed)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorInfo {
+    pub index: usize,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub scale_factor: f64,
+    pub is_primary: bool,
+}
+
+#[tauri::command]
+fn get_available_monitors(app: AppHandle) -> Vec<MonitorInfo> {
+    let mut list = Vec::new();
+    if let Ok(monitors) = app.available_monitors() {
+        for (i, m) in monitors.into_iter().enumerate() {
+            let size = m.size();
+            let name = m.name().cloned().unwrap_or_else(|| format!("Display {}", i + 1));
+            list.push(MonitorInfo {
+                index: i,
+                name,
+                width: size.width,
+                height: size.height,
+                scale_factor: m.scale_factor(),
+                is_primary: i == 0,
+            });
+        }
+    }
+    list
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -197,9 +331,21 @@ fn seek_track(position_ms: u32) -> Result<(), String> {
 #[tauri::command]
 fn dock_window(app: AppHandle, position: String) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
-        if let Ok(Some(monitor)) = window.current_monitor() {
-            let monitor_size = monitor.size();
-            let scale_factor = monitor.scale_factor();
+        let cfg_current = load_config();
+        let target_mon_opt = if let Some(idx) = cfg_current.target_monitor {
+            app.available_monitors().ok().and_then(|m_list| m_list.into_iter().nth(idx))
+        } else {
+            None
+        };
+
+        let monitor = target_mon_opt
+            .or_else(|| window.current_monitor().ok().flatten())
+            .or_else(|| app.primary_monitor().ok().flatten());
+
+        if let Some(mon) = monitor {
+            let monitor_size = mon.size();
+            let mon_pos = mon.position();
+            let scale_factor = mon.scale_factor();
             let screen_w = monitor_size.width as f64;
             let screen_h = monitor_size.height as f64;
 
@@ -207,8 +353,8 @@ fn dock_window(app: AppHandle, position: String) -> Result<(), String> {
             let win_w = cur_size.width as f64;
             let win_h = cur_size.height as f64;
 
-            let new_x = ((screen_w - win_w) / 2.0).round() as i32;
-            let new_y = match position.as_str() {
+            let rel_x = ((screen_w - win_w) / 2.0).round() as i32;
+            let rel_y = match position.as_str() {
                 "bottom-taskbar" => {
                     let taskbar_h = 56.0 * scale_factor;
                     let pad = 12.0 * scale_factor;
@@ -218,6 +364,9 @@ fn dock_window(app: AppHandle, position: String) -> Result<(), String> {
                 "bottom-screen" => ((screen_h - win_h - 16.0 * scale_factor).max(0.0)).round() as i32,
                 _ => return Ok(()),
             };
+
+            let new_x = mon_pos.x + rel_x;
+            let new_y = mon_pos.y + rel_y;
 
             let pos = tauri::Position::Physical(tauri::PhysicalPosition { x: new_x, y: new_y });
             window.set_position(pos).map_err(|e| e.to_string())?;
@@ -471,6 +620,11 @@ pub fn run() {
             toggle_main_window,
             seek_track,
             dock_window,
+            get_album_art,
+            control_playback,
+            set_aimp_volume,
+            save_edited_lyrics,
+            get_available_monitors,
             quit_app
         ])
         .run(tauri::generate_context!())
