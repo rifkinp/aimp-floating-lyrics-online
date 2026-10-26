@@ -323,3 +323,20 @@ pub fn start_aimp_polling_task(
         })
         .expect("failed to spawn aimp polling thread")
 }
+
+pub fn seek_track(position_ms: u32) -> Result<(), String> {
+    unsafe {
+        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
+            .map_err(|e| e.to_string())?;
+        if hwnd.0.is_null() {
+            return Err("AIMP window not found".to_string());
+        }
+        SendMessageW(
+            hwnd,
+            WM_AIMP_PROPERTY,
+            WPARAM(AIMP_PROP_TRACK_POSITION | 1),
+            LPARAM(position_ms as isize),
+        );
+        Ok(())
+    }
+}

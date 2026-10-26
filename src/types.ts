@@ -7,6 +7,8 @@ export interface LyricWord {
 export interface LyricLine {
   timeMs: number;
   text: string;
+  translation?: string;
+  romaji?: string;
   words?: LyricWord[];
 }
 
@@ -20,6 +22,8 @@ export interface ParsedLyrics {
   plainText: string;
   rawLrc: string;
   lines: LyricLine[];
+  hasTranslation?: boolean;
+  hasRomaji?: boolean;
 }
 
 export interface AimpTrackInfo {
@@ -54,6 +58,11 @@ export interface AppConfig {
   windowY?: number;
   windowWidth?: number;
   windowHeight?: number;
+  showDualLyrics?: boolean;
+  dualLyricsType?: 'translation' | 'romaji';
+  backgroundOpacity?: number;
+  enableGlassmorphism?: boolean;
+  dockPosition?: 'none' | 'bottom-taskbar' | 'top-screen';
 }
 
 export interface LrclibRecord {

@@ -681,12 +681,40 @@ impl LrcManager {
         #[derive(Deserialize)]
         struct NeteaseLyricResponse {
             lrc: Option<NeteaseLrcObj>,
+            tlyric: Option<NeteaseLrcObj>,
+            romalrc: Option<NeteaseLrcObj>,
         }
 
         let lyric_data = lyric_resp.json::<NeteaseLyricResponse>().await.ok()?;
-        let raw_lrc = lyric_data.lrc?.lyric?;
+        let raw_lrc = lyric_data.lrc.as_ref().and_then(|l| l.lyric.clone()).unwrap_or_default();
         if raw_lrc.trim().is_empty() {
             return None;
+        }
+
+        let mut full_lrc = raw_lrc;
+        if let Some(t) = lyric_data.tlyric.and_then(|t| t.lyric) {
+            for line in t.lines() {
+                let trimmed = line.trim();
+                if let Some(close_b) = trimmed.find(']') {
+                    let ts = &trimmed[..=close_b];
+                    let txt = trimmed[close_b + 1..].trim();
+                    if !txt.is_empty() {
+                        full_lrc.push_str(&format!("\n{}[tr]{}", ts, txt));
+                    }
+                }
+            }
+        }
+        if let Some(r) = lyric_data.romalrc.and_then(|r| r.lyric) {
+            for line in r.lines() {
+                let trimmed = line.trim();
+                if let Some(close_b) = trimmed.find(']') {
+                    let ts = &trimmed[..=close_b];
+                    let txt = trimmed[close_b + 1..].trim();
+                    if !txt.is_empty() {
+                        full_lrc.push_str(&format!("\n{}[ro]{}", ts, txt));
+                    }
+                }
+            }
         }
 
         let artist_str = best_song
@@ -704,7 +732,7 @@ impl LrcManager {
             duration: best_song.dt.map(|ms| ms as f64 / 1000.0),
             instrumental: Some(false),
             plain_lyrics: None,
-            synced_lyrics: Some(raw_lrc),
+            synced_lyrics: Some(full_lrc),
             provider: Some("NetEase".to_string()),
         })
     }
@@ -777,7 +805,32 @@ impl LrcManager {
                                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&txt) {
                                         if let Some(l) = val.get("lrc").and_then(|v| v.get("lyric")).and_then(|v| v.as_str()) {
                                             if !l.trim().is_empty() {
-                                                synced = Some(l.to_string());
+                                                let mut combined = l.to_string();
+                                                if let Some(t) = val.get("tlyric").and_then(|v| v.get("lyric")).and_then(|v| v.as_str()) {
+                                                    for line in t.lines() {
+                                                        let trimmed = line.trim();
+                                                        if let Some(close_b) = trimmed.find(']') {
+                                                            let ts = &trimmed[..=close_b];
+                                                            let ctxt = trimmed[close_b + 1..].trim();
+                                                            if !ctxt.is_empty() {
+                                                                combined.push_str(&format!("\n{}[tr]{}", ts, ctxt));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                if let Some(r) = val.get("romalrc").and_then(|v| v.get("lyric")).and_then(|v| v.as_str()) {
+                                                    for line in r.lines() {
+                                                        let trimmed = line.trim();
+                                                        if let Some(close_b) = trimmed.find(']') {
+                                                            let ts = &trimmed[..=close_b];
+                                                            let ctxt = trimmed[close_b + 1..].trim();
+                                                            if !ctxt.is_empty() {
+                                                                combined.push_str(&format!("\n{}[ro]{}", ts, ctxt));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                synced = Some(combined);
                                             }
                                         }
                                     }

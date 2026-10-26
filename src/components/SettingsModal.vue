@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate, Sparkles, Eye, Check } from 'lucide-vue-next';
+import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate, Sparkles, Eye, Check, Languages, Sliders, Anchor } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { AppConfig } from '../types';
@@ -123,6 +123,16 @@ const updateStrokeColor = (hex: string) => {
   commitConfig();
 };
 
+const updateDock = async (pos: string) => {
+  localConfig.value.dockPosition = pos as any;
+  commitConfig();
+  try {
+    await invoke('dock_window', { position: pos });
+  } catch (err) {
+    console.error('Failed to dock window:', err);
+  }
+};
+
 const handleSliderChange = () => {
   commitConfig();
 };
@@ -213,6 +223,13 @@ const resetDefaults = () => {
               }"
             >
               🎵 Never gonna give you up
+            </div>
+            <div
+              v-if="localConfig.showDualLyrics"
+              class="font-medium italic tracking-wide text-sky-200/90 lyric-stroke truncate w-full"
+              :style="{ fontSize: `${Math.max(Math.min(localConfig.fontSize, 34) * 0.52, 11)}px` }"
+            >
+              {{ localConfig.dualLyricsType === 'romaji' ? '🔤 Kimi wo kesshite akiramenai' : '🌐 Takkan pernah menyerah padamu' }}
             </div>
             <div
               class="font-medium tracking-normal lyric-stroke truncate w-full"
@@ -430,6 +447,106 @@ const resetDefaults = () => {
             class="w-7 h-7 rounded cursor-pointer bg-transparent border-0"
             title="Custom Hex Color"
           />
+        </div>
+      </div>
+
+      <!-- Dual Lyrics / Translation & Romaji -->
+      <div class="space-y-3 pt-3 border-t border-slate-800">
+        <div class="flex items-center justify-between">
+          <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+            <Languages class="w-3.5 h-3.5 text-sky-400" />
+            <span>Show Dual Lyrics (Translation / Romaji)</span>
+          </label>
+          <input
+            v-model="localConfig.showDualLyrics"
+            @change="handleSliderChange"
+            type="checkbox"
+            class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
+          />
+        </div>
+        <div v-if="localConfig.showDualLyrics" class="space-y-1.5 pl-5">
+          <div class="text-[11px] text-slate-400">Pilihan Baris Sub-Lirik:</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              @click="localConfig.dualLyricsType = 'translation'; commitConfig()"
+              class="py-1.5 px-3 rounded-lg border text-center transition font-medium text-xs"
+              :class="localConfig.dualLyricsType !== 'romaji'
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'"
+            >
+              🌐 Translation (Arti)
+            </button>
+            <button
+              type="button"
+              @click="localConfig.dualLyricsType = 'romaji'; commitConfig()"
+              class="py-1.5 px-3 rounded-lg border text-center transition font-medium text-xs"
+              :class="localConfig.dualLyricsType === 'romaji'
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'"
+            >
+              🔤 Romaji / Pinyin
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Background & Glassmorphism -->
+      <div class="space-y-2.5 pt-3 border-t border-slate-800">
+        <div class="flex items-center justify-between font-semibold text-slate-300">
+          <label class="flex items-center space-x-1.5">
+            <Sliders class="w-3.5 h-3.5 text-sky-400" />
+            <span>Background Opacity</span>
+          </label>
+          <span class="font-mono text-sky-400 text-sm font-bold">{{ Math.round((localConfig.backgroundOpacity ?? 0.15) * 100) }}%</span>
+        </div>
+        <input
+          v-model.number="localConfig.backgroundOpacity"
+          @input="handleSliderChange"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          class="w-full accent-sky-400 h-2 bg-slate-700 rounded-lg cursor-pointer"
+        />
+
+        <div class="flex items-center justify-between pt-1">
+          <div>
+            <div class="font-semibold text-slate-200 text-xs">Enable Glassmorphism (Frosted Glass Blur)</div>
+            <div class="text-[11px] text-slate-400">Efek blur latar belakang transparan modern Windows 11</div>
+          </div>
+          <input
+            v-model="localConfig.enableGlassmorphism"
+            @change="handleSliderChange"
+            type="checkbox"
+            class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <!-- Screen Docking Mode -->
+      <div class="space-y-2 pt-3 border-t border-slate-800">
+        <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+          <Anchor class="w-3.5 h-3.5 text-sky-400" />
+          <span>Screen Docking Position</span>
+        </label>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="dock in [
+              { id: 'none', label: '📌 Free Float' },
+              { id: 'bottom-taskbar', label: '⬇️ Above Taskbar' },
+              { id: 'top-screen', label: '⬆️ Top Screen' }
+            ]"
+            :key="dock.id"
+            type="button"
+            @click="updateDock(dock.id)"
+            class="py-2 px-1 rounded-xl border text-center transition font-medium text-[11px]"
+            :class="(localConfig.dockPosition || 'none') === dock.id
+              ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+              : 'bg-slate-800/60 border-slate-700/80 text-slate-400 hover:bg-slate-800'"
+          >
+            {{ dock.label }}
+          </button>
         </div>
       </div>
 
@@ -775,7 +892,107 @@ const resetDefaults = () => {
           </div>
         </div>
 
-        <!-- Local File Auto-Save Toggle -->
+        <!-- Dual Lyrics / Translation & Romaji -->
+      <div class="space-y-3 pt-3 border-t border-slate-800">
+        <div class="flex items-center justify-between">
+          <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+            <Languages class="w-3.5 h-3.5 text-sky-400" />
+            <span>Show Dual Lyrics (Translation / Romaji)</span>
+          </label>
+          <input
+            v-model="localConfig.showDualLyrics"
+            @change="handleSliderChange"
+            type="checkbox"
+            class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
+          />
+        </div>
+        <div v-if="localConfig.showDualLyrics" class="space-y-1.5 pl-5">
+          <div class="text-[11px] text-slate-400">Pilihan Baris Sub-Lirik:</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              @click="localConfig.dualLyricsType = 'translation'; commitConfig()"
+              class="py-1.5 px-3 rounded-lg border text-center transition font-medium text-xs"
+              :class="localConfig.dualLyricsType !== 'romaji'
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'"
+            >
+              🌐 Translation (Arti)
+            </button>
+            <button
+              type="button"
+              @click="localConfig.dualLyricsType = 'romaji'; commitConfig()"
+              class="py-1.5 px-3 rounded-lg border text-center transition font-medium text-xs"
+              :class="localConfig.dualLyricsType === 'romaji'
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'"
+            >
+              🔤 Romaji / Pinyin
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Background & Glassmorphism -->
+      <div class="space-y-2.5 pt-3 border-t border-slate-800">
+        <div class="flex items-center justify-between font-semibold text-slate-300">
+          <label class="flex items-center space-x-1.5">
+            <Sliders class="w-3.5 h-3.5 text-sky-400" />
+            <span>Background Opacity</span>
+          </label>
+          <span class="font-mono text-sky-400 text-sm font-bold">{{ Math.round((localConfig.backgroundOpacity ?? 0.15) * 100) }}%</span>
+        </div>
+        <input
+          v-model.number="localConfig.backgroundOpacity"
+          @input="handleSliderChange"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          class="w-full accent-sky-400 h-2 bg-slate-700 rounded-lg cursor-pointer"
+        />
+
+        <div class="flex items-center justify-between pt-1">
+          <div>
+            <div class="font-semibold text-slate-200 text-xs">Enable Glassmorphism (Frosted Glass Blur)</div>
+            <div class="text-[11px] text-slate-400">Efek blur latar belakang transparan modern Windows 11</div>
+          </div>
+          <input
+            v-model="localConfig.enableGlassmorphism"
+            @change="handleSliderChange"
+            type="checkbox"
+            class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <!-- Screen Docking Mode -->
+      <div class="space-y-2 pt-3 border-t border-slate-800">
+        <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+          <Anchor class="w-3.5 h-3.5 text-sky-400" />
+          <span>Screen Docking Position</span>
+        </label>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="dock in [
+              { id: 'none', label: '📌 Free Float' },
+              { id: 'bottom-taskbar', label: '⬇️ Above Taskbar' },
+              { id: 'top-screen', label: '⬆️ Top Screen' }
+            ]"
+            :key="dock.id"
+            type="button"
+            @click="updateDock(dock.id)"
+            class="py-2 px-1 rounded-xl border text-center transition font-medium text-[11px]"
+            :class="(localConfig.dockPosition || 'none') === dock.id
+              ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+              : 'bg-slate-800/60 border-slate-700/80 text-slate-400 hover:bg-slate-800'"
+          >
+            {{ dock.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Local File Auto-Save Toggle -->
         <div class="pt-2 border-t border-slate-800 flex items-center justify-between">
           <div>
             <div class="font-semibold text-slate-200">Auto-Save .lrc Alongside Audio</div>

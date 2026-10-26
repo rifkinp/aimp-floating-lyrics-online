@@ -6,23 +6,33 @@ import {
   Settings,
   Minus,
   X,
-  Plus,
-  RotateCcw
+  ListMusic,
+  Anchor
 } from 'lucide-vue-next';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { AimpTrackInfo } from '../types';
 
-const props = defineProps<{
-  track: AimpTrackInfo | null;
-  offsetMs: number;
-  isLocked: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    track: AimpTrackInfo | null;
+    offsetMs: number;
+    isLocked: boolean;
+    showFullLyrics?: boolean;
+    dockPosition?: string;
+  }>(),
+  {
+    showFullLyrics: false,
+    dockPosition: 'none',
+  }
+);
 
 const emit = defineEmits<{
   (e: 'lock'): void;
   (e: 'open-search'): void;
   (e: 'open-settings'): void;
   (e: 'adjust-offset', deltaMs: number): void;
+  (e: 'toggle-full-lyrics'): void;
+  (e: 'dock', position: string): void;
 }>();
 
 import { invoke } from '@tauri-apps/api/core';
@@ -33,6 +43,11 @@ const startDrag = (e: MouseEvent) => {
   if (e.buttons === 1) {
     appWindow.startDragging();
   }
+};
+
+const toggleDock = () => {
+  const next = props.dockPosition === 'bottom-taskbar' ? 'none' : 'bottom-taskbar';
+  emit('dock', next);
 };
 
 const minimizeWindow = async () => {
@@ -123,6 +138,29 @@ const closeApp = async () => {
 
     <!-- Right: Action Buttons -->
     <div class="flex items-center space-x-1 ml-2">
+      <!-- Full Lyrics on Hover Toggle -->
+      <button
+        type="button"
+        @click="emit('toggle-full-lyrics')"
+        class="flex items-center space-x-1 px-2 py-0.5 rounded transition active:scale-95 text-[11px]"
+        :class="showFullLyrics ? 'bg-sky-500 text-white font-bold shadow-sm shadow-sky-500/30' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white'"
+        title="Full Lyrics / Songbook (Auto-returns to synced timestamp when mouse leaves)"
+      >
+        <ListMusic class="w-3 h-3" />
+        <span>{{ showFullLyrics ? 'Synced' : 'Full' }}</span>
+      </button>
+
+      <!-- Docking Toggle -->
+      <button
+        type="button"
+        @click="toggleDock"
+        class="p-1 rounded hover:bg-white/15 transition active:scale-95"
+        :class="dockPosition === 'bottom-taskbar' ? 'text-sky-400 bg-sky-500/20' : 'text-slate-400 hover:text-white'"
+        :title="dockPosition === 'bottom-taskbar' ? 'Undock (Free Float)' : 'Dock right above Taskbar'"
+      >
+        <Anchor class="w-3.5 h-3.5" />
+      </button>
+
       <button
         @click="emit('open-search')"
         class="p-1 rounded hover:bg-white/15 text-slate-300 hover:text-white transition active:scale-95"

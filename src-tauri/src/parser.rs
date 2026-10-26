@@ -13,6 +13,8 @@ pub struct LyricWord {
 pub struct LyricLine {
     pub time_ms: u32,
     pub text: String,
+    pub translation: Option<String>,
+    pub romaji: Option<String>,
     pub words: Option<Vec<LyricWord>>,
 }
 
@@ -28,6 +30,8 @@ pub struct ParsedLyrics {
     pub plain_text: String,
     pub raw_lrc: String,
     pub lines: Vec<LyricLine>,
+    pub has_translation: bool,
+    pub has_romaji: bool,
 }
 
 impl Default for ParsedLyrics {
@@ -42,6 +46,8 @@ impl Default for ParsedLyrics {
             plain_text: String::new(),
             raw_lrc: String::new(),
             lines: Vec::new(),
+            has_translation: false,
+            has_romaji: false,
         }
     }
 }
@@ -52,7 +58,7 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
     let mut album = None;
     let mut offset_ms: i64 = 0;
     let mut is_instrumental = false;
-    let mut lines = Vec::new();
+    let mut lines: Vec<LyricLine> = Vec::new();
 
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -120,11 +126,58 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
         let remaining_text = line[idx..].trim();
 
         if !timestamps.is_empty() {
+            // Check if this line is an explicit translation line [tr] or [trans]
+            if remaining_text.starts_with("[tr]") || remaining_text.starts_with("[trans]") {
+                let clean_tr = if remaining_text.starts_with("[tr]") {
+                    remaining_text[4..].trim()
+                } else {
+                    remaining_text[7..].trim()
+                };
+                for ts in &timestamps {
+                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 50) {
+                        existing.translation = Some(clean_tr.to_string());
+                    } else {
+                        lines.push(LyricLine {
+                            time_ms: *ts,
+                            text: clean_tr.to_string(),
+                            translation: Some(clean_tr.to_string()),
+                            romaji: None,
+                            words: None,
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // Check if this line is an explicit romaji line [ro] or [roma]
+            if remaining_text.starts_with("[ro]") || remaining_text.starts_with("[roma]") {
+                let clean_ro = if remaining_text.starts_with("[ro]") {
+                    remaining_text[4..].trim()
+                } else {
+                    remaining_text[6..].trim()
+                };
+                for ts in &timestamps {
+                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 50) {
+                        existing.romaji = Some(clean_ro.to_string());
+                    }
+                }
+                continue;
+            }
+
             let (clean_text, words) = parse_enhanced_words(remaining_text);
+            let (main_text, inline_trans) = if clean_text.contains(" // ") {
+                let parts: Vec<&str> = clean_text.splitn(2, " // ").collect();
+                (parts[0].trim().to_string(), Some(parts[1].trim().to_string()))
+            } else {
+                (clean_text, None)
+            };
+
             for ts in timestamps {
                 lines.push(LyricLine {
                     time_ms: ts,
-                    text: clean_text.clone(),
+                    text: main_text.clone(),
+                    translation: inline_trans.clone(),
+                    romaji: None,
                     words: words.clone(),
                 });
             }
@@ -135,6 +188,9 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
 
     // Sort lines by timestamp
     lines.sort_by_key(|l| l.time_ms);
+
+    let has_translation = lines.iter().any(|l| l.translation.is_some());
+    let has_romaji = lines.iter().any(|l| l.romaji.is_some());
 
     let plain_text = if is_synced {
         lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n")
@@ -152,6 +208,46 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
         plain_text,
         raw_lrc: content.to_string(),
         lines,
+        has_translation,
+        has_romaji,
+    }
+}
+
+pub fn merge_translations(
+    parsed: &mut ParsedLyrics,
+    tlyric: Option<&str>,
+    romalrc: Option<&str>,
+) {
+    if let Some(t_content) = tlyric {
+        let t_parsed = parse_lrc(t_content);
+        for t_line in t_parsed.lines {
+            if let Some(match_line) = parsed.lines.iter_mut().min_by_key(|l| {
+                (l.time_ms as i64 - t_line.time_ms as i64).abs()
+            }) {
+                if (match_line.time_ms as i64 - t_line.time_ms as i64).abs() < 600 {
+                    if !t_line.text.trim().is_empty() {
+                        match_line.translation = Some(t_line.text);
+                        parsed.has_translation = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(r_content) = romalrc {
+        let r_parsed = parse_lrc(r_content);
+        for r_line in r_parsed.lines {
+            if let Some(match_line) = parsed.lines.iter_mut().min_by_key(|l| {
+                (l.time_ms as i64 - r_line.time_ms as i64).abs()
+            }) {
+                if (match_line.time_ms as i64 - r_line.time_ms as i64).abs() < 600 {
+                    if !r_line.text.trim().is_empty() {
+                        match_line.romaji = Some(r_line.text);
+                        parsed.has_romaji = true;
+                    }
+                }
+            }
+        }
     }
 }
 

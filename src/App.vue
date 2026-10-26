@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import HoverToolbar from './components/HoverToolbar.vue';
 import LyricsDisplay from './components/LyricsDisplay.vue';
+import FullLyricsView from './components/FullLyricsView.vue';
 import ManualSearchModal from './components/ManualSearchModal.vue';
 import SettingsModal from './components/SettingsModal.vue';
 import type {
@@ -259,6 +260,53 @@ const handleUpdateConfig = async (newConfig: AppConfig) => {
   }
 };
 
+const showFullLyrics = ref(false);
+
+const handleMouseEnter = () => {
+  if (!isLocked.value) {
+    isHovered.value = true;
+  }
+};
+
+const handleMouseLeave = () => {
+  isHovered.value = false;
+  showFullLyrics.value = false; // Always revert to synchronized timestamp view!
+};
+
+const handleSeekTrack = async (posMs: number) => {
+  try {
+    await invoke('seek_track', { positionMs: posMs });
+  } catch (err) {
+    console.error('Failed to seek track:', err);
+  }
+};
+
+const handleDock = async (position: string) => {
+  try {
+    await invoke('dock_window', { position });
+  } catch (err) {
+    console.error('Failed to dock window:', err);
+  }
+};
+
+const backgroundStyle = computed(() => {
+  let opacity = config.value.backgroundOpacity ?? 0.15;
+  if (!isLocked.value && isHovered.value) {
+    opacity = Math.max(opacity, 0.88);
+  } else if (isLocked.value) {
+    opacity = config.value.backgroundOpacity ?? 0.0;
+  }
+
+  const isGlass = config.value.enableGlassmorphism ?? true;
+  return {
+    backgroundColor: opacity > 0.01 ? `rgba(15, 23, 42, ${opacity})` : 'transparent',
+    backdropFilter: isGlass && opacity > 0.05 ? 'blur(16px)' : 'none',
+    WebkitBackdropFilter: isGlass && opacity > 0.05 ? 'blur(16px)' : 'none',
+    border: opacity > 0.05 ? `1px solid rgba(255, 255, 255, ${Math.min(opacity * 0.25, 0.2)})` : 'none',
+    boxShadow: opacity > 0.1 ? '0 20px 25px -5px rgba(0, 0, 0, 0.6)' : 'none',
+  };
+});
+
 const onLyricsApplied = (newLyrics: ParsedLyrics) => {
   lyrics.value = newLyrics;
 };
@@ -294,15 +342,11 @@ const hideCurrentWindow = async () => {
   <!-- Window 3: Main Floating Lyrics Overlay -->
   <main
     v-else
-    @mouseenter="isHovered = true"
-    @mouseleave="isHovered = false"
-    @mousemove="isHovered = true"
-    class="relative w-screen h-screen flex flex-col justify-between overflow-hidden transition-all duration-200"
-    :class="[
-      !isLocked && isHovered
-        ? 'bg-slate-950/85 backdrop-blur-md rounded-2xl border border-white/15 shadow-2xl'
-        : (!isLocked ? 'bg-slate-950/[0.02]' : 'bg-transparent')
-    ]"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+    @mousemove="handleMouseEnter"
+    class="relative w-screen h-screen flex flex-col justify-between overflow-hidden transition-all duration-200 rounded-2xl"
+    :style="backgroundStyle"
   >
     <!-- Hover Toolbar (Unlocked mode only) -->
     <div
@@ -314,16 +358,31 @@ const hideCurrentWindow = async () => {
         :track="track"
         :offset-ms="lyrics?.offsetMs || 0"
         :is-locked="isLocked"
+        :show-full-lyrics="showFullLyrics"
+        :dock-position="config.dockPosition || 'none'"
         @lock="toggleLock"
         @open-search="openSearchWindow"
         @open-settings="openSettingsWindow"
         @adjust-offset="handleAdjustOffset"
+        @toggle-full-lyrics="showFullLyrics = !showFullLyrics"
+        @dock="handleDock"
       />
     </div>
 
-    <!-- Lyrics Display Core -->
-    <div class="flex-1 w-full flex items-center justify-center min-h-0">
+    <!-- Lyrics Display Core or Full Lyrics on Hover -->
+    <div class="flex-1 w-full flex items-center justify-center min-h-0 overflow-hidden">
+      <!-- Full Lyrics on Hover (reverts automatically on mouseleave) -->
+      <FullLyricsView
+        v-if="showFullLyrics && isHovered && lyrics && lyrics.lines.length > 0"
+        :lyrics="lyrics"
+        :current-position-ms="positionMs"
+        :config="config"
+        @seek="handleSeekTrack"
+      />
+
+      <!-- Synced Floating Lyrics Overlay -->
       <LyricsDisplay
+        v-else
         :track="track"
         :lyrics="lyrics"
         :current-position-ms="positionMs"

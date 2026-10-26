@@ -189,6 +189,50 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn seek_track(position_ms: u32) -> Result<(), String> {
+    aimp::seek_track(position_ms)
+}
+
+#[tauri::command]
+fn dock_window(app: AppHandle, position: String) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let monitor_size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let screen_w = monitor_size.width as f64;
+            let screen_h = monitor_size.height as f64;
+
+            let cur_size = window.outer_size().map_err(|e| e.to_string())?;
+            let win_w = cur_size.width as f64;
+            let win_h = cur_size.height as f64;
+
+            let new_x = ((screen_w - win_w) / 2.0).round() as i32;
+            let new_y = match position.as_str() {
+                "bottom-taskbar" => {
+                    let taskbar_h = 56.0 * scale_factor;
+                    let pad = 12.0 * scale_factor;
+                    ((screen_h - taskbar_h - win_h - pad).max(0.0)).round() as i32
+                }
+                "top-screen" => (24.0 * scale_factor).round() as i32,
+                "bottom-screen" => ((screen_h - win_h - 16.0 * scale_factor).max(0.0)).round() as i32,
+                _ => return Ok(()),
+            };
+
+            let pos = tauri::Position::Physical(tauri::PhysicalPosition { x: new_x, y: new_y });
+            window.set_position(pos).map_err(|e| e.to_string())?;
+
+            let mut cfg = load_config();
+            cfg.dock_position = position;
+            cfg.window_x = Some(new_x);
+            cfg.window_y = Some(new_y);
+            let _ = save_config(&cfg);
+            let _ = app.emit("config://updated", &cfg);
+        }
+    }
+    Ok(())
+}
+
 fn start_global_hotkey_listener(app: AppHandle) {
     std::thread::Builder::new()
         .name("global-hotkey".into())
@@ -425,6 +469,8 @@ pub fn run() {
             minimize_window,
             show_main_window,
             toggle_main_window,
+            seek_track,
+            dock_window,
             quit_app
         ])
         .run(tauri::generate_context!())

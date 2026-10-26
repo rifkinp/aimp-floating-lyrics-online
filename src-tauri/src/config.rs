@@ -21,6 +21,11 @@ pub struct AppConfig {
     pub window_y: Option<i32>,
     pub window_width: Option<u32>,
     pub window_height: Option<u32>,
+    pub show_dual_lyrics: bool,
+    pub dual_lyrics_type: String, // "translation" | "romaji"
+    pub background_opacity: f64,  // 0.0 - 1.0
+    pub enable_glassmorphism: bool,
+    pub dock_position: String,    // "none" | "bottom-taskbar" | "top-screen"
 }
 
 impl Default for AppConfig {
@@ -42,6 +47,11 @@ impl Default for AppConfig {
             window_y: None,
             window_width: Some(840),
             window_height: Some(180),
+            show_dual_lyrics: true,
+            dual_lyrics_type: "translation".to_string(),
+            background_opacity: 0.15,
+            enable_glassmorphism: true,
+            dock_position: "none".to_string(),
         }
     }
 }

@@ -59,6 +59,14 @@ const lineProgress = computed(() => {
   return Math.min(Math.max(pct, 0), 100);
 });
 
+const currentSubText = computed(() => {
+  if (!props.config.showDualLyrics || !currentLine.value) return null;
+  if (props.config.dualLyricsType === 'romaji') {
+    return currentLine.value.romaji || currentLine.value.translation;
+  }
+  return currentLine.value.translation || currentLine.value.romaji;
+});
+
 const styleVariables = computed(() => {
   return {
     '--font-size': `${props.config.fontSize}px`,
@@ -128,6 +136,15 @@ const styleVariables = computed(() => {
           {{ currentLine?.text || '...' }}
         </div>
 
+        <!-- Dual Lyrics Sub-line -->
+        <div
+          v-if="currentSubText"
+          class="font-medium italic tracking-wide text-sky-200/90 lyric-stroke truncate w-full"
+          :style="{ fontSize: 'calc(var(--font-size) * 0.52)' }"
+        >
+          {{ currentSubText }}
+        </div>
+
         <!-- Next Line -->
         <div
           class="font-medium tracking-normal text-white/65 lyric-stroke transition-all duration-300 truncate w-full"
@@ -143,15 +160,23 @@ const styleVariables = computed(() => {
       <!-- 2. Single-Line Fade Mode -->
       <div v-else-if="config.displayMode === 'single-line'" class="w-full">
         <Transition name="fade-slide" mode="out-in">
-          <div
-            :key="currentLine?.timeMs || 0"
-            class="font-bold tracking-tight text-white lyric-stroke-thick truncate w-full"
-            :style="{
-              fontSize: 'var(--font-size)',
-              color: 'var(--active-color)'
-            }"
-          >
-            {{ currentLine?.text || '...' }}
+          <div :key="currentLine?.timeMs || 0" class="flex flex-col space-y-1 w-full">
+            <div
+              class="font-bold tracking-tight text-white lyric-stroke-thick truncate w-full"
+              :style="{
+                fontSize: 'var(--font-size)',
+                color: 'var(--active-color)'
+              }"
+            >
+              {{ currentLine?.text || '...' }}
+            </div>
+            <div
+              v-if="currentSubText"
+              class="font-medium italic tracking-wide text-sky-200/90 lyric-stroke truncate w-full"
+              :style="{ fontSize: 'calc(var(--font-size) * 0.52)' }"
+            >
+              {{ currentSubText }}
+            </div>
           </div>
         </Transition>
       </div>
@@ -185,6 +210,15 @@ const styleVariables = computed(() => {
           :style="{ fontSize: 'var(--font-size)' }"
         >
           {{ currentLine?.text || '...' }}
+        </div>
+
+        <!-- Dual Lyrics Sub-line in Karaoke mode -->
+        <div
+          v-if="currentSubText"
+          class="font-medium italic tracking-wide text-sky-200/90 lyric-stroke truncate w-full"
+          :style="{ fontSize: 'calc(var(--font-size) * 0.52)' }"
+        >
+          {{ currentSubText }}
         </div>
 
         <!-- Next Line Preview -->
