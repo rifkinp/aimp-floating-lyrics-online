@@ -30,6 +30,7 @@ const localConfig = ref<AppConfig>({
   strokeWidth: 2,
   textAlign: 'center',
   saveToAudioFolder: true,
+  closeWithAimp: false,
   lrclibAppId: '',
   ...(props.config || {}),
 });
@@ -86,6 +87,15 @@ const handleSliderChange = () => {
   commitConfig();
 };
 
+const closeSettings = async () => {
+  await commitConfig();
+  try {
+    await invoke('hide_window', { label: 'settings' });
+  } catch (_) {
+    emit('close');
+  }
+};
+
 const resetDefaults = () => {
   localConfig.value = {
     ...localConfig.value,
@@ -98,6 +108,7 @@ const resetDefaults = () => {
     strokeWidth: 2,
     textAlign: 'center',
     saveToAudioFolder: true,
+    closeWithAimp: false,
   };
   commitConfig();
 };
@@ -116,7 +127,7 @@ const resetDefaults = () => {
         <h2 class="font-bold text-sm tracking-wide text-white">Appearance & Settings</h2>
       </div>
       <button
-        @click="emit('close')"
+        @click="closeSettings"
         class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
         title="Close"
       >
@@ -226,10 +237,24 @@ const resetDefaults = () => {
       <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
         <div>
           <div class="font-semibold text-slate-200 text-xs">Auto-Save .lrc Alongside Audio</div>
-          <div class="text-[11px] text-slate-400">Save downloaded lyrics directly next to the audio file</div>
+          <div class="text-[11px] text-slate-400">Simpan otomatis lirik yang diunduh ke folder lagu</div>
         </div>
         <input
           v-model="localConfig.saveToAudioFolder"
+          @change="handleSliderChange"
+          type="checkbox"
+          class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
+        />
+      </div>
+
+      <!-- Auto-Close When AIMP Exits -->
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+        <div>
+          <div class="font-semibold text-slate-200 text-xs">Auto-Close When AIMP Exits</div>
+          <div class="text-[11px] text-slate-400">Tutup otomatis Floating Lyrics saat pemutar musik AIMP di-close</div>
+        </div>
+        <input
+          v-model="localConfig.closeWithAimp"
           @change="handleSliderChange"
           type="checkbox"
           class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
@@ -266,7 +291,7 @@ const resetDefaults = () => {
       </button>
 
       <button
-        @click="emit('close')"
+        @click="closeSettings"
         class="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-sky-500/20"
       >
         Done & Save

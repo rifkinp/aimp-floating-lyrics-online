@@ -57,6 +57,50 @@ fn open_search_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn hide_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
+    let lbl = label.as_deref().unwrap_or("main");
+    if let Some(window) = app.get_webview_window(lbl) {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn minimize_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
+    let lbl = label.as_deref().unwrap_or("main");
+    if let Some(window) = app.get_webview_window(lbl) {
+        window.minimize().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn show_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn toggle_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_focus();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn set_click_through(app: AppHandle, locked: bool) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window
@@ -143,6 +187,13 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // Setup System Tray
+            let toggle_show_item = MenuItem::with_id(
+                app,
+                "toggle_show",
+                "Show / Hide Floating Lyrics",
+                true,
+                None::<&str>,
+            )?;
             let lock_item = MenuItem::with_id(
                 app,
                 "lock_toggle",
@@ -164,6 +215,8 @@ pub fn run() {
             let menu = Menu::with_items(
                 app,
                 &[
+                    &toggle_show_item,
+                    &PredefinedMenuItem::separator(app)?,
                     &lock_item,
                     &search_item,
                     &settings_item,
@@ -176,6 +229,9 @@ pub fn run() {
                 .menu(&menu)
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "toggle_show" => {
+                        let _ = toggle_main_window(app.clone());
+                    }
                     "lock_toggle" => {
                         let cfg = load_config();
                         let new_state = !cfg.click_through;
@@ -193,17 +249,19 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                    match event {
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            ..
                         }
+                        | TrayIconEvent::DoubleClick {
+                            button: MouseButton::Left,
+                            ..
+                        } => {
+                            let app = tray.app_handle();
+                            let _ = show_main_window(app.clone());
+                        }
+                        _ => {}
                     }
                 })
                 .build(app)?;
@@ -258,7 +316,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let label = window.label();
-                if label == "settings" || label == "search" {
+                if label == "settings" || label == "search" || label == "main" {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -275,6 +333,10 @@ pub fn run() {
             adjust_offset,
             open_settings_window,
             open_search_window,
+            hide_window,
+            minimize_window,
+            show_main_window,
+            toggle_main_window,
             quit_app
         ])
         .run(tauri::generate_context!())

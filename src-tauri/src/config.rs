@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub stroke_width: u32,
     pub text_align: String, // "center", "left", "right"
     pub save_to_audio_folder: bool,
+    pub close_with_aimp: bool,
     pub lrclib_app_id: Option<String>,
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
@@ -35,6 +36,7 @@ impl Default for AppConfig {
             stroke_width: 2,
             text_align: "center".to_string(),
             save_to_audio_folder: true,
+            close_with_aimp: false,
             lrclib_app_id: None,
             window_x: None,
             window_y: None,

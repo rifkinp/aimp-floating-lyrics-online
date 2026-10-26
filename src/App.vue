@@ -253,6 +253,14 @@ const handleUpdateConfig = async (newConfig: AppConfig) => {
 const onLyricsApplied = (newLyrics: ParsedLyrics) => {
   lyrics.value = newLyrics;
 };
+
+const hideCurrentWindow = async () => {
+  try {
+    await invoke('hide_window', { label: windowLabel });
+  } catch (_) {
+    currentWindow.hide();
+  }
+};
 </script>
 
 <template>
@@ -261,7 +269,7 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
     v-if="windowLabel === 'settings'"
     :standalone="true"
     :config="config"
-    @close="currentWindow.hide()"
+    @close="hideCurrentWindow"
     @update-config="handleUpdateConfig"
   />
 
@@ -270,7 +278,7 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
     v-else-if="windowLabel === 'search'"
     :standalone="true"
     :track="track"
-    @close="currentWindow.hide()"
+    @close="hideCurrentWindow"
     @lyrics-applied="onLyricsApplied"
   />
 

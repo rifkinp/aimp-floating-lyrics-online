@@ -82,6 +82,14 @@ const handleSearch = async () => {
   }
 };
 
+const closeSearch = async () => {
+  try {
+    await invoke('hide_window', { label: 'search' });
+  } catch (_) {
+    emit('close');
+  }
+};
+
 const applyRecord = async (record: LrclibRecord) => {
   const rawLrc = record.syncedLyrics || record.plainLyrics;
   if (!rawLrc) {
@@ -98,7 +106,7 @@ const applyRecord = async (record: LrclibRecord) => {
       rawLrc,
     });
     emit('lyrics-applied', parsed);
-    emit('close');
+    await closeSearch();
   } catch (err: any) {
     errorMessage.value = String(err || 'Gagal menerapkan lirik.');
   } finally {
@@ -127,7 +135,7 @@ const formatDuration = (secs?: number) => {
         <h2 class="font-bold text-sm tracking-wide text-white">Manual Lyrics Search (LRCLIB)</h2>
       </div>
       <button
-        @click="emit('close')"
+        @click="closeSearch"
         class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
         title="Close"
       >

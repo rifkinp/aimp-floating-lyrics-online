@@ -300,6 +300,13 @@ pub fn start_aimp_polling_task(
                             },
                         );
                     }
+
+                    // Optional: If user enabled close_with_aimp in settings, auto-exit when AIMP closes
+                    let cfg = crate::config::load_config();
+                    if cfg.close_with_aimp && hwnd_opt.is_none() && last_track.duration_ms > 0 {
+                        app.exit(0);
+                        break;
+                    }
                 }
 
                 std::thread::sleep(Duration::from_millis(50));

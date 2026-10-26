@@ -25,6 +25,8 @@ const emit = defineEmits<{
   (e: 'adjust-offset', deltaMs: number): void;
 }>();
 
+import { invoke } from '@tauri-apps/api/core';
+
 const appWindow = getCurrentWebviewWindow();
 
 const startDrag = (e: MouseEvent) => {
@@ -33,12 +35,20 @@ const startDrag = (e: MouseEvent) => {
   }
 };
 
-const minimizeWindow = () => {
-  appWindow.minimize();
+const minimizeWindow = async () => {
+  try {
+    await invoke('hide_window', { label: 'main' });
+  } catch (err) {
+    console.error('Failed to minimize window:', err);
+  }
 };
 
-const closeApp = () => {
-  appWindow.close();
+const closeApp = async () => {
+  try {
+    await invoke('hide_window', { label: 'main' });
+  } catch (err) {
+    console.error('Failed to close/hide window:', err);
+  }
 };
 </script>
 
@@ -140,7 +150,7 @@ const closeApp = () => {
       <button
         @click="minimizeWindow"
         class="p-1 rounded hover:bg-white/15 text-slate-400 hover:text-white transition"
-        title="Minimize"
+        title="Minimize to System Tray"
       >
         <Minus class="w-3.5 h-3.5" />
       </button>
@@ -148,7 +158,7 @@ const closeApp = () => {
       <button
         @click="closeApp"
         class="p-1 rounded hover:bg-red-500/30 text-slate-400 hover:text-red-300 transition"
-        title="Close Overlay"
+        title="Hide to System Tray (Restore anytime from Tray icon)"
       >
         <X class="w-3.5 h-3.5" />
       </button>
