@@ -191,6 +191,24 @@ const resetDefaults = () => {
             class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
           />
         </div>
+
+        <!-- LRCLIB Application ID -->
+        <div class="pt-2 border-t border-slate-800 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200">LRCLIB Application ID</span>
+            <span class="text-[10px] text-sky-400 font-mono">Lrclib-App-Id</span>
+          </div>
+          <input
+            v-model="localConfig.lrclibAppId"
+            @input="handleSliderChange"
+            type="text"
+            placeholder="e.g. eJ3m5Pbtu1XIMGEEro1ykAFNPBrwf9tD2Q5f3Wzi42E"
+            class="w-full bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 font-mono transition"
+          />
+          <div class="text-[10px] text-slate-400">
+            Mengumumkan Application ID ke LRCLIB API untuk verifikasi & bypass rate-limit. Juga dapat diisi via file <code class="text-sky-300">.env</code>.
+          </div>
+        </div>
       </div>
 
       <!-- Footer -->

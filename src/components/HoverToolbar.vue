@@ -27,6 +27,12 @@ const emit = defineEmits<{
 
 const appWindow = getCurrentWebviewWindow();
 
+const startDrag = (e: MouseEvent) => {
+  if (e.buttons === 1) {
+    appWindow.startDragging();
+  }
+};
+
 const minimizeWindow = () => {
   appWindow.minimize();
 };
@@ -38,19 +44,23 @@ const closeApp = () => {
 
 <template>
   <div
+    @mousedown.self="startDrag"
     class="flex items-center justify-between w-full px-3 py-1.5 bg-slate-900/85 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl transition-all duration-200 select-none text-xs text-slate-200 font-medium"
   >
     <!-- Left: Drag Region & Song Info -->
-    <div class="flex items-center space-x-2 flex-1 min-w-0">
+    <div
+      data-tauri-drag-region
+      @mousedown="startDrag"
+      class="flex items-center space-x-2 flex-1 min-w-0 cursor-grab active:cursor-grabbing"
+    >
       <div
-        data-tauri-drag-region
-        class="flex items-center space-x-1 cursor-grab active:cursor-grabbing p-1 hover:bg-white/10 rounded-md transition-colors"
+        class="flex items-center space-x-1 p-1 hover:bg-white/10 rounded-md transition-colors"
         title="Drag to move overlay"
       >
         <GripVertical class="w-3.5 h-3.5 text-slate-400" />
       </div>
 
-      <div class="truncate flex items-center space-x-1.5 max-w-[260px]">
+      <div class="truncate flex items-center space-x-1.5 max-w-[260px] pointer-events-none">
         <span class="inline-block w-2 h-2 rounded-full" :class="track?.state === 2 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
         <span class="text-white font-semibold truncate">{{ track?.title || 'Waiting for AIMP...' }}</span>
         <span v-if="track?.artist" class="text-slate-400 truncate text-[11px]">- {{ track.artist }}</span>

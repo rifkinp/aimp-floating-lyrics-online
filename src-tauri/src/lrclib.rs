@@ -263,7 +263,12 @@ impl LrcManager {
     {
         let mut retries = 0;
         loop {
-            let req = make_request();
+            let mut req = make_request();
+            if let Some(app_id) = crate::config::get_lrclib_app_id() {
+                if let Ok(val) = HeaderValue::from_str(&app_id) {
+                    req = req.header("Lrclib-App-Id", val);
+                }
+            }
             match req.send().await {
                 Ok(resp) => {
                     let status = resp.status();

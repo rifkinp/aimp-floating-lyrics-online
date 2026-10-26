@@ -225,11 +225,12 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
   <main
     @mouseenter="isHovered = true"
     @mouseleave="isHovered = false"
-    class="relative w-screen h-screen flex flex-col justify-between overflow-hidden transition-colors duration-200"
+    @mousemove="isHovered = true"
+    class="relative w-screen h-screen flex flex-col justify-between overflow-hidden transition-all duration-200"
     :class="[
       !isLocked && (isHovered || showSearchModal || showSettingsModal)
-        ? 'bg-slate-950/75 backdrop-blur-md rounded-2xl border border-white/10'
-        : 'bg-transparent'
+        ? 'bg-slate-950/85 backdrop-blur-md rounded-2xl border border-white/15 shadow-2xl'
+        : (!isLocked ? 'bg-slate-950/[0.02]' : 'bg-transparent')
     ]"
   >
     <!-- Hover Toolbar (Unlocked mode only) -->

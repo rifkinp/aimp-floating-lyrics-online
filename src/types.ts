@@ -48,6 +48,7 @@ export interface AppConfig {
   strokeWidth: number;
   textAlign: 'center' | 'left' | 'right';
   saveToAudioFolder: boolean;
+  lrclibAppId?: string;
   windowX?: number;
   windowY?: number;
   windowWidth?: number;

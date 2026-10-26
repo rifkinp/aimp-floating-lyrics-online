@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub stroke_width: u32,
     pub text_align: String, // "center", "left", "right"
     pub save_to_audio_folder: bool,
+    pub lrclib_app_id: Option<String>,
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
     pub window_width: Option<u32>,
@@ -34,6 +35,7 @@ impl Default for AppConfig {
             stroke_width: 2,
             text_align: "center".to_string(),
             save_to_audio_folder: true,
+            lrclib_app_id: None,
             window_x: None,
             window_y: None,
             window_width: Some(840),
@@ -79,4 +81,51 @@ pub fn save_config(cfg: &AppConfig) -> Result<(), String> {
     let path = get_config_path();
     let json = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
     fs::write(path, json).map_err(|e| e.to_string())
+}
+
+pub fn get_lrclib_app_id() -> Option<String> {
+    // 1. Check environment variable
+    if let Ok(id) = std::env::var("LRCLIB_APP_ID") {
+        let trimmed = id.trim().trim_matches('"').trim_matches('\'').to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+
+    // 2. Check .env in exe parent dir, current working dir, and appdata dir
+    let mut possible_paths = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            possible_paths.push(parent.join(".env"));
+        }
+    }
+    possible_paths.push(PathBuf::from(".env"));
+    possible_paths.push(get_app_dir().join(".env"));
+
+    for p in possible_paths {
+        if p.exists() {
+            if let Ok(content) = fs::read_to_string(&p) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("LRCLIB_APP_ID=") {
+                        let val = trimmed.trim_start_matches("LRCLIB_APP_ID=").trim().trim_matches('"').trim_matches('\'');
+                        if !val.is_empty() {
+                            return Some(val.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Check config.json
+    let cfg = load_config();
+    if let Some(id) = cfg.lrclib_app_id {
+        let trimmed = id.trim().to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+
+    None
 }
