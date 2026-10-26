@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct AppConfig {
     pub click_through: bool,
     pub display_mode: String, // "two-line", "single-line", "karaoke"
@@ -12,7 +12,7 @@ pub struct AppConfig {
     pub active_color: String,
     pub secondary_color: String,
     pub stroke_color: String,
-    pub stroke_width: u32,
+    pub stroke_width: f64,
     pub text_align: String, // "center", "left", "right"
     pub save_to_audio_folder: bool,
     pub close_with_aimp: bool,
@@ -33,7 +33,7 @@ impl Default for AppConfig {
             active_color: "#38BDF8".to_string(),    // Sky 400
             secondary_color: "rgba(255, 255, 255, 0.65)".to_string(),
             stroke_color: "#000000".to_string(),
-            stroke_width: 2,
+            stroke_width: 2.0,
             text_align: "center".to_string(),
             save_to_audio_folder: true,
             close_with_aimp: false,

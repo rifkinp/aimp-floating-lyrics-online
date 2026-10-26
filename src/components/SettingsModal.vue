@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate, Sparkles } from 'lucide-vue-next';
+import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate, Sparkles, Eye, Check } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { AppConfig } from '../types';
 
 const props = withDefaults(
@@ -18,6 +19,8 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'update-config', newConfig: AppConfig): void;
 }>();
+
+const isSaved = ref(false);
 
 const localConfig = ref<AppConfig>({
   clickThrough: false,
@@ -62,25 +65,39 @@ const strokeColorPresets = [
   { name: 'White Glow', hex: '#FFFFFF' },
 ];
 
-onMounted(async () => {
-  if (props.config) {
-    localConfig.value = { ...props.config };
-  } else {
-    try {
-      const cfg = await invoke<AppConfig>('get_app_config');
-      if (cfg) {
-        localConfig.value = cfg;
-      }
-    } catch (e) {
-      console.warn('Could not load config in Settings:', e);
+const loadFreshConfig = async () => {
+  try {
+    const cfg = await invoke<AppConfig>('get_app_config');
+    if (cfg) {
+      localConfig.value = { ...cfg };
+    }
+  } catch (err) {
+    if (props.config) {
+      localConfig.value = { ...props.config };
     }
   }
+};
+
+onMounted(async () => {
+  await loadFreshConfig();
+  try {
+    await listen<AppConfig>('config://updated', (event) => {
+      localConfig.value = { ...event.payload };
+    });
+  } catch (_) {}
 });
 
 const commitConfig = async () => {
+  localConfig.value.fontSize = Number(localConfig.value.fontSize) || 28;
+  localConfig.value.strokeWidth = Number(localConfig.value.strokeWidth) || 0;
+
   emit('update-config', { ...localConfig.value });
   try {
     await invoke('save_app_config', { config: localConfig.value });
+    isSaved.value = true;
+    setTimeout(() => {
+      isSaved.value = false;
+    }, 1500);
   } catch (err) {
     console.error('Failed to save config:', err);
   }
@@ -160,6 +177,101 @@ const resetDefaults = () => {
 
     <!-- Scrollable Content -->
     <div class="flex-1 p-5 space-y-5 overflow-y-auto text-xs">
+      <!-- Live Interactive Preview Card -->
+      <div class="p-4 bg-slate-950/80 border border-slate-700/80 rounded-2xl shadow-inner relative overflow-hidden">
+        <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800/80">
+          <div class="flex items-center space-x-1.5 text-[11px] font-semibold text-slate-300">
+            <Eye class="w-3.5 h-3.5 text-sky-400" />
+            <span>Live Preview</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span v-if="isSaved" class="text-[10px] text-emerald-400 font-medium flex items-center space-x-1 animate-pulse">
+              <Check class="w-3 h-3" />
+              <span>Saved</span>
+            </span>
+            <span class="text-[10px] font-mono text-slate-500 uppercase">{{ localConfig.displayMode }}</span>
+          </div>
+        </div>
+
+        <div
+          class="py-3 px-2 flex flex-col justify-center min-h-[76px] transition-all duration-200"
+          :style="{
+            fontFamily: localConfig.fontFamily || 'sans-serif',
+            textAlign: localConfig.textAlign,
+            alignItems: localConfig.textAlign === 'left' ? 'flex-start' : (localConfig.textAlign === 'right' ? 'flex-end' : 'center'),
+          }"
+        >
+          <!-- Two-Line Mode Preview -->
+          <div v-if="localConfig.displayMode === 'two-line'" class="space-y-1 w-full">
+            <div
+              class="font-bold tracking-tight lyric-stroke-thick truncate w-full"
+              :style="{
+                fontSize: `${Math.min(localConfig.fontSize, 34)}px`,
+                color: localConfig.activeColor,
+                '--stroke-color': localConfig.strokeColor,
+                '--stroke-width': `${localConfig.strokeWidth}px`,
+              }"
+            >
+              🎵 Never gonna give you up
+            </div>
+            <div
+              class="font-medium tracking-normal lyric-stroke truncate w-full"
+              :style="{
+                fontSize: `${Math.max(Math.min(localConfig.fontSize, 34) * 0.72, 12)}px`,
+                color: localConfig.secondaryColor,
+                '--stroke-color': localConfig.strokeColor,
+                '--stroke-width': `${localConfig.strokeWidth}px`,
+              }"
+            >
+              Never gonna let you down
+            </div>
+          </div>
+
+          <!-- Single-Line Mode Preview -->
+          <div v-else-if="localConfig.displayMode === 'single-line'" class="w-full">
+            <div
+              class="font-bold tracking-tight lyric-stroke-thick truncate w-full"
+              :style="{
+                fontSize: `${Math.min(localConfig.fontSize, 34)}px`,
+                color: localConfig.activeColor,
+                '--stroke-color': localConfig.strokeColor,
+                '--stroke-width': `${localConfig.strokeWidth}px`,
+              }"
+            >
+              🎵 Never gonna run around and desert you
+            </div>
+          </div>
+
+          <!-- Karaoke Mode Preview -->
+          <div v-else class="space-y-1 w-full">
+            <div
+              class="font-bold tracking-tight lyric-stroke-thick karaoke-fill truncate w-full"
+              :style="{
+                fontSize: `${Math.min(localConfig.fontSize, 34)}px`,
+                '--active-color': localConfig.activeColor,
+                '--secondary-color': localConfig.secondaryColor,
+                '--stroke-color': localConfig.strokeColor,
+                '--stroke-width': `${localConfig.strokeWidth}px`,
+                '--progress': '65%',
+              }"
+            >
+              🎵 Never gonna make you cry
+            </div>
+            <div
+              class="font-medium lyric-stroke truncate w-full"
+              :style="{
+                fontSize: `${Math.max(Math.min(localConfig.fontSize, 34) * 0.72, 12)}px`,
+                color: localConfig.secondaryColor,
+                '--stroke-color': localConfig.strokeColor,
+                '--stroke-width': `${localConfig.strokeWidth}px`,
+              }"
+            >
+              Never gonna say goodbye
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Display Mode -->
       <div class="space-y-2">
         <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
@@ -380,9 +492,10 @@ const resetDefaults = () => {
 
       <button
         @click="closeSettings"
-        class="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-sky-500/20"
+        class="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-sky-500/20 flex items-center space-x-1.5"
       >
-        Done & Save
+        <Check v-if="isSaved" class="w-3.5 h-3.5" />
+        <span>{{ isSaved ? 'Saved!' : 'Done & Save' }}</span>
       </button>
     </div>
   </div>
@@ -410,6 +523,97 @@ const resetDefaults = () => {
       </div>
 
       <div class="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+        <!-- Live Interactive Preview Card -->
+        <div class="p-3 bg-slate-950/80 border border-slate-700/80 rounded-xl shadow-inner relative overflow-hidden">
+          <div class="flex items-center justify-between mb-1.5 pb-1.5 border-b border-slate-800/80">
+            <div class="flex items-center space-x-1.5 text-[10px] font-semibold text-slate-300">
+              <Eye class="w-3 h-3 text-sky-400" />
+              <span>Live Preview</span>
+            </div>
+            <span v-if="isSaved" class="text-[9px] text-emerald-400 font-medium flex items-center space-x-1 animate-pulse">
+              <Check class="w-3 h-3" />
+              <span>Saved</span>
+            </span>
+          </div>
+
+          <div
+            class="py-2 px-1 flex flex-col justify-center min-h-[60px] transition-all duration-200"
+            :style="{
+              fontFamily: localConfig.fontFamily || 'sans-serif',
+              textAlign: localConfig.textAlign,
+              alignItems: localConfig.textAlign === 'left' ? 'flex-start' : (localConfig.textAlign === 'right' ? 'flex-end' : 'center'),
+            }"
+          >
+            <!-- Two-Line Mode Preview -->
+            <div v-if="localConfig.displayMode === 'two-line'" class="space-y-0.5 w-full">
+              <div
+                class="font-bold tracking-tight lyric-stroke-thick truncate w-full"
+                :style="{
+                  fontSize: `${Math.min(localConfig.fontSize, 30)}px`,
+                  color: localConfig.activeColor,
+                  '--stroke-color': localConfig.strokeColor,
+                  '--stroke-width': `${localConfig.strokeWidth}px`,
+                }"
+              >
+                🎵 Never gonna give you up
+              </div>
+              <div
+                class="font-medium tracking-normal lyric-stroke truncate w-full"
+                :style="{
+                  fontSize: `${Math.max(Math.min(localConfig.fontSize, 30) * 0.72, 11)}px`,
+                  color: localConfig.secondaryColor,
+                  '--stroke-color': localConfig.strokeColor,
+                  '--stroke-width': `${localConfig.strokeWidth}px`,
+                }"
+              >
+                Never gonna let you down
+              </div>
+            </div>
+
+            <!-- Single-Line Mode Preview -->
+            <div v-else-if="localConfig.displayMode === 'single-line'" class="w-full">
+              <div
+                class="font-bold tracking-tight lyric-stroke-thick truncate w-full"
+                :style="{
+                  fontSize: `${Math.min(localConfig.fontSize, 30)}px`,
+                  color: localConfig.activeColor,
+                  '--stroke-color': localConfig.strokeColor,
+                  '--stroke-width': `${localConfig.strokeWidth}px`,
+                }"
+              >
+                🎵 Never gonna run around and desert you
+              </div>
+            </div>
+
+            <!-- Karaoke Mode Preview -->
+            <div v-else class="space-y-0.5 w-full">
+              <div
+                class="font-bold tracking-tight lyric-stroke-thick karaoke-fill truncate w-full"
+                :style="{
+                  fontSize: `${Math.min(localConfig.fontSize, 30)}px`,
+                  '--active-color': localConfig.activeColor,
+                  '--secondary-color': localConfig.secondaryColor,
+                  '--stroke-color': localConfig.strokeColor,
+                  '--stroke-width': `${localConfig.strokeWidth}px`,
+                  '--progress': '65%',
+                }"
+              >
+                🎵 Never gonna make you cry
+              </div>
+              <div
+                class="font-medium lyric-stroke truncate w-full"
+                :style="{
+                  fontSize: `${Math.max(Math.min(localConfig.fontSize, 30) * 0.72, 11)}px`,
+                  color: localConfig.secondaryColor,
+                  '--stroke-color': localConfig.strokeColor,
+                  '--stroke-width': `${localConfig.strokeWidth}px`,
+                }"
+              >
+                Never gonna say goodbye
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Display Mode -->
         <div class="space-y-1.5">
           <label class="flex items-center space-x-1.5 font-semibold text-slate-300">

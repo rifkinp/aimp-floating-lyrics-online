@@ -30,9 +30,26 @@ fn get_app_config() -> AppConfig {
 }
 
 #[tauri::command]
-fn save_app_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
+fn save_app_config(app: AppHandle, mut config: AppConfig) -> Result<(), String> {
+    let existing = load_config();
+    if config.window_x.is_none() {
+        config.window_x = existing.window_x;
+    }
+    if config.window_y.is_none() {
+        config.window_y = existing.window_y;
+    }
+    if config.window_width.is_none() {
+        config.window_width = existing.window_width;
+    }
+    if config.window_height.is_none() {
+        config.window_height = existing.window_height;
+    }
+
     save_config(&config)?;
     let _ = app.emit("config://updated", &config);
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.emit("config://updated", &config);
+    }
     Ok(())
 }
 
