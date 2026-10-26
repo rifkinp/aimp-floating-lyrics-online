@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate } from 'lucide-vue-next';
+import { Settings, X, RotateCcw, Palette, Type, LayoutTemplate, Sparkles } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig } from '../types';
 
@@ -35,6 +35,33 @@ const localConfig = ref<AppConfig>({
   ...(props.config || {}),
 });
 
+const fontFamilies = [
+  { name: 'Inter (Modern Clean)', value: 'Inter, system-ui, sans-serif' },
+  { name: 'Segoe UI (Windows Default)', value: "'Segoe UI', system-ui, sans-serif" },
+  { name: 'Roboto (Material)', value: 'Roboto, sans-serif' },
+  { name: 'Poppins (Rounded Modern)', value: 'Poppins, sans-serif' },
+  { name: 'Montserrat (Bold Clean)', value: 'Montserrat, sans-serif' },
+  { name: 'Arial (Classic Sans)', value: 'Arial, sans-serif' },
+  { name: 'Trebuchet MS (Humanist)', value: "'Trebuchet MS', sans-serif" },
+];
+
+const colorPresets = [
+  { name: 'Sky Blue', hex: '#38BDF8' },
+  { name: 'Sunset Gold', hex: '#FBBF24' },
+  { name: 'Pure White', hex: '#FFFFFF' },
+  { name: 'Neon Green', hex: '#4ADE80' },
+  { name: 'Hot Pink', hex: '#F472B6' },
+  { name: 'Electric Violet', hex: '#A78BFA' },
+];
+
+const strokeColorPresets = [
+  { name: 'Pitch Black', hex: '#000000' },
+  { name: 'Slate Deep', hex: '#0f172a' },
+  { name: 'Midnight Navy', hex: '#1e1b4b' },
+  { name: 'Dark Gray', hex: '#374151' },
+  { name: 'White Glow', hex: '#FFFFFF' },
+];
+
 onMounted(async () => {
   if (props.config) {
     localConfig.value = { ...props.config };
@@ -49,15 +76,6 @@ onMounted(async () => {
     }
   }
 });
-
-const colorPresets = [
-  { name: 'Sky Blue', hex: '#38BDF8' },
-  { name: 'Sunset Gold', hex: '#FBBF24' },
-  { name: 'Pure White', hex: '#FFFFFF' },
-  { name: 'Neon Green', hex: '#4ADE80' },
-  { name: 'Hot Pink', hex: '#F472B6' },
-  { name: 'Electric Violet', hex: '#A78BFA' },
-];
 
 const commitConfig = async () => {
   emit('update-config', { ...localConfig.value });
@@ -80,6 +98,11 @@ const updateAlign = (align: 'center' | 'left' | 'right') => {
 
 const updateActiveColor = (hex: string) => {
   localConfig.value.activeColor = hex;
+  commitConfig();
+};
+
+const updateStrokeColor = (hex: string) => {
+  localConfig.value.strokeColor = hex;
   commitConfig();
 };
 
@@ -163,6 +186,23 @@ const resetDefaults = () => {
         </div>
       </div>
 
+      <!-- Font Family Dropdown -->
+      <div class="space-y-2">
+        <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+          <Type class="w-3.5 h-3.5 text-sky-400" />
+          <span>Font Family</span>
+        </label>
+        <select
+          v-model="localConfig.fontFamily"
+          @change="handleSliderChange"
+          class="w-full bg-slate-800 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 cursor-pointer"
+        >
+          <option v-for="font in fontFamilies" :key="font.value" :value="font.value">
+            {{ font.name }}
+          </option>
+        </select>
+      </div>
+
       <!-- Font Size Slider -->
       <div class="space-y-2">
         <div class="flex items-center justify-between font-semibold text-slate-300">
@@ -181,6 +221,54 @@ const resetDefaults = () => {
           step="1"
           class="w-full accent-sky-400 h-2 bg-slate-700 rounded-lg cursor-pointer"
         />
+      </div>
+
+      <!-- Text Outline / Stroke -->
+      <div class="space-y-2.5 pt-3 border-t border-slate-800">
+        <div class="flex items-center justify-between font-semibold text-slate-300">
+          <label class="flex items-center space-x-1.5">
+            <Sparkles class="w-3.5 h-3.5 text-sky-400" />
+            <span>Outline Stroke Width</span>
+          </label>
+          <span class="font-mono text-sky-400 text-sm font-bold">{{ localConfig.strokeWidth }}px</span>
+        </div>
+        <input
+          v-model.number="localConfig.strokeWidth"
+          @input="handleSliderChange"
+          type="range"
+          min="0"
+          max="6"
+          step="0.5"
+          class="w-full accent-sky-400 h-2 bg-slate-700 rounded-lg cursor-pointer"
+        />
+
+        <div class="space-y-1.5">
+          <label class="text-[11px] font-semibold text-slate-400">Outline Stroke Color</label>
+          <div class="flex items-center space-x-3">
+            <button
+              v-for="color in strokeColorPresets"
+              :key="color.hex"
+              type="button"
+              @click="updateStrokeColor(color.hex)"
+              class="w-6 h-6 rounded-full border border-white/20 transition-transform hover:scale-110 relative"
+              :style="{ backgroundColor: color.hex }"
+              :title="color.name"
+            >
+              <span
+                v-if="localConfig.strokeColor.toLowerCase() === color.hex.toLowerCase()"
+                class="absolute inset-0 flex items-center justify-center font-bold text-[10px]"
+                :class="color.hex === '#FFFFFF' ? 'text-black' : 'text-white'"
+              >✓</span>
+            </button>
+            <input
+              v-model="localConfig.strokeColor"
+              @input="handleSliderChange"
+              type="color"
+              class="w-6 h-6 rounded cursor-pointer bg-transparent border-0"
+              title="Custom Stroke Color"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- Text Alignment -->
@@ -348,6 +436,23 @@ const resetDefaults = () => {
           </div>
         </div>
 
+        <!-- Font Family Dropdown -->
+        <div class="space-y-1.5">
+          <label class="flex items-center space-x-1.5 font-semibold text-slate-300">
+            <Type class="w-3.5 h-3.5 text-sky-400" />
+            <span>Font Family</span>
+          </label>
+          <select
+            v-model="localConfig.fontFamily"
+            @change="handleSliderChange"
+            class="w-full bg-slate-800 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            <option v-for="font in fontFamilies" :key="font.value" :value="font.value">
+              {{ font.name }}
+            </option>
+          </select>
+        </div>
+
         <!-- Font Size Slider -->
         <div class="space-y-1.5">
           <div class="flex items-center justify-between font-semibold text-slate-300">
@@ -366,6 +471,54 @@ const resetDefaults = () => {
             step="1"
             class="w-full accent-sky-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
           />
+        </div>
+
+        <!-- Text Outline / Stroke -->
+        <div class="space-y-2 pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-between font-semibold text-slate-300">
+            <label class="flex items-center space-x-1.5">
+              <Sparkles class="w-3.5 h-3.5 text-sky-400" />
+              <span>Outline Stroke Width</span>
+            </label>
+            <span class="font-mono text-sky-400 text-xs font-bold">{{ localConfig.strokeWidth }}px</span>
+          </div>
+          <input
+            v-model.number="localConfig.strokeWidth"
+            @input="handleSliderChange"
+            type="range"
+            min="0"
+            max="6"
+            step="0.5"
+            class="w-full accent-sky-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+          />
+
+          <div class="space-y-1">
+            <label class="text-[10px] font-semibold text-slate-400">Outline Stroke Color</label>
+            <div class="flex items-center space-x-2">
+              <button
+                v-for="color in strokeColorPresets"
+                :key="color.hex"
+                type="button"
+                @click="updateStrokeColor(color.hex)"
+                class="w-5 h-5 rounded-full border border-white/20 transition-transform hover:scale-110 relative"
+                :style="{ backgroundColor: color.hex }"
+                :title="color.name"
+              >
+                <span
+                  v-if="localConfig.strokeColor.toLowerCase() === color.hex.toLowerCase()"
+                  class="absolute inset-0 flex items-center justify-center font-bold text-[9px]"
+                  :class="color.hex === '#FFFFFF' ? 'text-black' : 'text-white'"
+                >✓</span>
+              </button>
+              <input
+                v-model="localConfig.strokeColor"
+                @input="handleSliderChange"
+                type="color"
+                class="w-5 h-5 rounded cursor-pointer bg-transparent border-0"
+                title="Custom Stroke Color"
+              />
+            </div>
+          </div>
         </div>
 
         <!-- Text Alignment -->

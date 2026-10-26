@@ -22,6 +22,7 @@ pub struct LrclibRecord {
     pub instrumental: Option<bool>,
     pub plain_lyrics: Option<String>,
     pub synced_lyrics: Option<String>,
+    pub provider: Option<String>,
 }
 
 pub struct LrcManager {
@@ -200,13 +201,23 @@ impl LrcManager {
             .fetch_exact(&clean_artist, &clean_title, album.trim(), duration_secs)
             .await;
 
-        if let Ok(record) = exact_result {
+        if let Ok(mut record) = exact_result {
+            record.provider = Some("LRCLIB".to_string());
             if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
                 return Ok(parsed);
             }
         }
 
-        // Step 4: LRCLIB Search Fallback (/api/search)
+        let target_dur = duration_secs as f64;
+
+        // Step 4: LRC.RED Provider (High quality line & word sync)
+        if let Some(record) = self.fetch_lrcred(&clean_artist, &clean_title, target_dur).await {
+            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
+                return Ok(parsed);
+            }
+        }
+
+        // Step 5: LRCLIB Search Fallback (/api/search)
         let mut search_results = self.search_tracks(&clean_artist, &clean_title).await.unwrap_or_default();
 
         // If no results and artist was given, search by title alone as fallback
@@ -216,44 +227,52 @@ impl LrcManager {
             }
         }
 
-        // Pick best matching record
-        let target_dur = duration_secs as f64;
-        let mut best_record: Option<&LrclibRecord> = None;
+        // Pick best matching record with synced lyrics from LRCLIB
+        let mut best_record: Option<LrclibRecord> = None;
         let mut min_diff = f64::MAX;
 
-        // First look for records with syncedLyrics
         for rec in &search_results {
             if rec.synced_lyrics.is_some() {
                 let dur = rec.duration.unwrap_or(0.0);
                 let diff = (dur - target_dur).abs();
                 if diff < min_diff {
                     min_diff = diff;
-                    best_record = Some(rec);
-                }
-            }
-        }
-
-        // If no synced lyrics, fallback to plain lyrics
-        if best_record.is_none() {
-            for rec in &search_results {
-                if rec.plain_lyrics.is_some() {
-                    let dur = rec.duration.unwrap_or(0.0);
-                    let diff = (dur - target_dur).abs();
-                    if diff < min_diff {
-                        min_diff = diff;
-                        best_record = Some(rec);
+                    let mut r = rec.clone();
+                    if r.provider.is_none() {
+                        r.provider = Some("LRCLIB".to_string());
                     }
+                    best_record = Some(r);
                 }
             }
         }
 
-        if let Some(record) = best_record {
+        if let Some(record) = &best_record {
             if let Some(parsed) = self.process_and_save_record(record, audio_path, &clean_artist, &clean_title) {
                 return Ok(parsed);
             }
         }
 
-        Err("No lyrics found online".to_string())
+        // Step 6: NetEase Cloud Music Provider (Massive Asian / Japanese / Korean / Indo library)
+        if let Some(record) = self.fetch_netease(&clean_artist, &clean_title, target_dur).await {
+            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
+                return Ok(parsed);
+            }
+        }
+
+        // Step 7: Fallback to plain lyrics from LRCLIB if no synced lyrics found
+        for rec in &search_results {
+            if rec.plain_lyrics.is_some() {
+                let mut r = rec.clone();
+                if r.provider.is_none() {
+                    r.provider = Some("LRCLIB".to_string());
+                }
+                if let Some(parsed) = self.process_and_save_record(&r, audio_path, &clean_artist, &clean_title) {
+                    return Ok(parsed);
+                }
+            }
+        }
+
+        Err("No lyrics found online across all providers".to_string())
     }
 
     async fn execute_with_retry<T, F>(&self, make_request: F) -> Result<T, String>
@@ -370,12 +389,422 @@ impl LrcManager {
     }
 
     pub async fn manual_search_query(&self, query_str: &str) -> Result<Vec<LrclibRecord>, String> {
+        let (lrclib_res, lrcred_res, netease_res) = tokio::join!(
+            self.search_lrclib_query(query_str),
+            self.search_lrcred_query(query_str),
+            self.search_netease_query(query_str),
+        );
+
+        let mut combined = Vec::new();
+
+        if let Ok(records) = lrclib_res {
+            for mut r in records {
+                if r.provider.is_none() {
+                    r.provider = Some("LRCLIB".to_string());
+                }
+                combined.push(r);
+            }
+        }
+
+        combined.extend(lrcred_res);
+        combined.extend(netease_res);
+
+        Ok(combined)
+    }
+
+    async fn search_lrclib_query(&self, query_str: &str) -> Result<Vec<LrclibRecord>, String> {
         self.execute_with_retry(|| {
             self.client
                 .get(format!("{}/search", API_BASE))
                 .query(&[("q", query_str)])
         })
         .await
+    }
+
+    pub async fn fetch_lrcred(
+        &self,
+        artist: &str,
+        title: &str,
+        target_duration_secs: f64,
+    ) -> Option<LrclibRecord> {
+        let q = format!("{} {}", artist, title).trim().to_string();
+
+        let resp = self
+            .client
+            .get("https://lrc.red/search.json")
+            .query(&[("q", &q)])
+            .header("User-Agent", USER_AGENT)
+            .send()
+            .await
+            .ok()?;
+
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        #[derive(Deserialize)]
+        struct LrcRedHit {
+            isrc: String,
+            title: Option<String>,
+            artist: Option<String>,
+            album: Option<String>,
+            duration: Option<f64>,
+        }
+
+        #[derive(Deserialize)]
+        struct LrcRedResponse {
+            hits: Option<Vec<LrcRedHit>>,
+        }
+
+        let data = resp.json::<LrcRedResponse>().await.ok()?;
+        let hits = data.hits?;
+        if hits.is_empty() {
+            return None;
+        }
+
+        // Find closest duration match (within 6 seconds)
+        let mut best_hit = &hits[0];
+        let mut min_diff = f64::MAX;
+        for hit in &hits {
+            if let Some(dur) = hit.duration {
+                let diff = (dur - target_duration_secs).abs();
+                if diff < min_diff {
+                    min_diff = diff;
+                    best_hit = hit;
+                }
+            }
+        }
+
+        if target_duration_secs > 0.0 && min_diff > 8.0 {
+            // Not a reliable match
+            return None;
+        }
+
+        let lrc_url = format!("https://lrc.red/s/{}.lrc", best_hit.isrc);
+        let lrc_resp = self
+            .client
+            .get(&lrc_url)
+            .header("User-Agent", USER_AGENT)
+            .send()
+            .await
+            .ok()?;
+
+        if !lrc_resp.status().is_success() {
+            return None;
+        }
+
+        let lrc_text = lrc_resp.text().await.ok()?;
+        if lrc_text.trim().is_empty() {
+            return None;
+        }
+
+        Some(LrclibRecord {
+            id: 80000000 + (best_hit.isrc.as_bytes().iter().map(|b| *b as i64).sum::<i64>()),
+            name: best_hit.title.clone(),
+            track_name: best_hit.title.clone(),
+            artist_name: best_hit.artist.clone(),
+            album_name: best_hit.album.clone(),
+            duration: best_hit.duration,
+            instrumental: Some(false),
+            plain_lyrics: None,
+            synced_lyrics: Some(lrc_text),
+            provider: Some("LRC.RED".to_string()),
+        })
+    }
+
+    pub async fn search_lrcred_query(&self, query_str: &str) -> Vec<LrclibRecord> {
+        let resp = self
+            .client
+            .get("https://lrc.red/search.json")
+            .query(&[("q", query_str)])
+            .header("User-Agent", USER_AGENT)
+            .send()
+            .await;
+
+        let mut results = Vec::new();
+        if let Ok(r) = resp {
+            if r.status().is_success() {
+                #[derive(Deserialize)]
+                struct LrcRedHit {
+                    isrc: String,
+                    title: Option<String>,
+                    artist: Option<String>,
+                    album: Option<String>,
+                    duration: Option<f64>,
+                }
+                #[derive(Deserialize)]
+                struct LrcRedResponse {
+                    hits: Option<Vec<LrcRedHit>>,
+                }
+
+                if let Ok(data) = r.json::<LrcRedResponse>().await {
+                    if let Some(hits) = data.hits {
+                        for h in hits.into_iter().take(5) {
+                            // Fetch .lrc content
+                            let lrc_url = format!("https://lrc.red/s/{}.lrc", h.isrc);
+                            let lrc_text = match self
+                                .client
+                                .get(&lrc_url)
+                                .header("User-Agent", USER_AGENT)
+                                .send()
+                                .await
+                            {
+                                Ok(res) => res.text().await.ok(),
+                                Err(_) => None,
+                            };
+
+                            if let Some(txt) = lrc_text {
+                                if !txt.trim().is_empty() {
+                                    results.push(LrclibRecord {
+                                        id: 80000000 + (h.isrc.as_bytes().iter().map(|b| *b as i64).sum::<i64>()),
+                                        name: h.title.clone(),
+                                        track_name: h.title.clone(),
+                                        artist_name: h.artist.clone(),
+                                        album_name: h.album.clone(),
+                                        duration: h.duration,
+                                        instrumental: Some(false),
+                                        plain_lyrics: None,
+                                        synced_lyrics: Some(txt),
+                                        provider: Some("LRC.RED".to_string()),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    pub async fn fetch_netease(
+        &self,
+        artist: &str,
+        title: &str,
+        target_duration_secs: f64,
+    ) -> Option<LrclibRecord> {
+        let q = format!("{} {}", artist, title).trim().to_string();
+
+        let resp = self
+            .client
+            .post("https://music.163.com/api/cloudsearch/pc")
+            .header("User-Agent", "NeteaseMusic/2.9.7.200100 (Windows 10.0; x64)")
+            .header("Referer", "https://music.163.com")
+            .header(
+                "Cookie",
+                "os=pc; osver=Microsoft-Windows-10-Professional-build-19042-64bit; appver=2.9.7; channel=netease",
+            )
+            .form(&[
+                ("s", q.as_str()),
+                ("type", "1"),
+                ("offset", "0"),
+                ("limit", "5"),
+            ])
+            .send()
+            .await
+            .ok()?;
+
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseArtist {
+            name: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseSong {
+            id: i64,
+            name: Option<String>,
+            ar: Option<Vec<NeteaseArtist>>,
+            dt: Option<i64>, // ms
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseResult {
+            songs: Option<Vec<NeteaseSong>>,
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseSearchResponse {
+            result: Option<NeteaseResult>,
+        }
+
+        let data = resp.json::<NeteaseSearchResponse>().await.ok()?;
+        let songs = data.result?.songs?;
+        if songs.is_empty() {
+            return None;
+        }
+
+        let target_ms = (target_duration_secs * 1000.0) as i64;
+        let mut best_song = &songs[0];
+        let mut min_diff = i64::MAX;
+
+        for s in &songs {
+            if let Some(dt) = s.dt {
+                let diff = (dt - target_ms).abs();
+                if diff < min_diff {
+                    min_diff = diff;
+                    best_song = s;
+                }
+            }
+        }
+
+        if target_duration_secs > 0.0 && min_diff > 8000 {
+            return None;
+        }
+
+        let lyric_url = format!(
+            "https://music.163.com/api/song/lyric?os=pc&id={}&lv=-1&kv=-1&tv=-1",
+            best_song.id
+        );
+
+        let lyric_resp = self
+            .client
+            .get(&lyric_url)
+            .header("User-Agent", "NeteaseMusic/2.9.7.200100 (Windows 10.0; x64)")
+            .header("Referer", "https://music.163.com")
+            .send()
+            .await
+            .ok()?;
+
+        if !lyric_resp.status().is_success() {
+            return None;
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseLrcObj {
+            lyric: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct NeteaseLyricResponse {
+            lrc: Option<NeteaseLrcObj>,
+        }
+
+        let lyric_data = lyric_resp.json::<NeteaseLyricResponse>().await.ok()?;
+        let raw_lrc = lyric_data.lrc?.lyric?;
+        if raw_lrc.trim().is_empty() {
+            return None;
+        }
+
+        let artist_str = best_song
+            .ar
+            .as_ref()
+            .and_then(|a| a.first())
+            .and_then(|ar| ar.name.clone());
+
+        Some(LrclibRecord {
+            id: 90000000 + best_song.id,
+            name: best_song.name.clone(),
+            track_name: best_song.name.clone(),
+            artist_name: artist_str,
+            album_name: None,
+            duration: best_song.dt.map(|ms| ms as f64 / 1000.0),
+            instrumental: Some(false),
+            plain_lyrics: None,
+            synced_lyrics: Some(raw_lrc),
+            provider: Some("NetEase".to_string()),
+        })
+    }
+
+    pub async fn search_netease_query(&self, query_str: &str) -> Vec<LrclibRecord> {
+        let resp = self
+            .client
+            .post("https://music.163.com/api/cloudsearch/pc")
+            .header("User-Agent", "NeteaseMusic/2.9.7.200100 (Windows 10.0; x64)")
+            .header("Referer", "https://music.163.com")
+            .header(
+                "Cookie",
+                "os=pc; osver=Microsoft-Windows-10-Professional-build-19042-64bit; appver=2.9.7; channel=netease",
+            )
+            .form(&[
+                ("s", query_str),
+                ("type", "1"),
+                ("offset", "0"),
+                ("limit", "5"),
+            ])
+            .send()
+            .await;
+
+        let mut results = Vec::new();
+        if let Ok(r) = resp {
+            if r.status().is_success() {
+                #[derive(Deserialize)]
+                struct NeteaseArtist {
+                    name: Option<String>,
+                }
+                #[derive(Deserialize)]
+                struct NeteaseSong {
+                    id: i64,
+                    name: Option<String>,
+                    ar: Option<Vec<NeteaseArtist>>,
+                    dt: Option<i64>,
+                }
+                #[derive(Deserialize)]
+                struct NeteaseResult {
+                    songs: Option<Vec<NeteaseSong>>,
+                }
+                #[derive(Deserialize)]
+                struct NeteaseSearchResponse {
+                    result: Option<NeteaseResult>,
+                }
+
+                if let Ok(data) = r.json::<NeteaseSearchResponse>().await {
+                    if let Some(res) = data.result {
+                        if let Some(songs) = res.songs {
+                            for s in songs {
+                                let lyric_url = format!(
+                                    "https://music.163.com/api/song/lyric?os=pc&id={}&lv=-1&kv=-1&tv=-1",
+                                    s.id
+                                );
+
+                                let lrc_txt = match self
+                                    .client
+                                    .get(&lyric_url)
+                                    .header("User-Agent", "NeteaseMusic/2.9.7.200100 (Windows 10.0; x64)")
+                                    .header("Referer", "https://music.163.com")
+                                    .send()
+                                    .await
+                                {
+                                    Ok(lr) => lr.text().await.ok(),
+                                    Err(_) => None,
+                                };
+
+                                let mut synced = None;
+                                if let Some(txt) = lrc_txt {
+                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&txt) {
+                                        if let Some(l) = val.get("lrc").and_then(|v| v.get("lyric")).and_then(|v| v.as_str()) {
+                                            if !l.trim().is_empty() {
+                                                synced = Some(l.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if synced.is_some() {
+                                    let art = s.ar.as_ref().and_then(|a| a.first()).and_then(|ar| ar.name.clone());
+                                    results.push(LrclibRecord {
+                                        id: 90000000 + s.id,
+                                        name: s.name.clone(),
+                                        track_name: s.name.clone(),
+                                        artist_name: art,
+                                        album_name: None,
+                                        duration: s.dt.map(|ms| ms as f64 / 1000.0),
+                                        instrumental: Some(false),
+                                        plain_lyrics: None,
+                                        synced_lyrics: synced,
+                                        provider: Some("NetEase".to_string()),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        results
     }
 
     fn process_and_save_record(

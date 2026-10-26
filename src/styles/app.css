@@ -32,6 +32,8 @@ html, body, #app {
 
 /* Custom lyrics stroke and glow */
 .lyric-stroke {
+  -webkit-text-stroke: calc(var(--stroke-width, 2px) * 0.6) var(--stroke-color, #000);
+  paint-order: stroke fill;
   text-shadow:
     -1px -1px 0 var(--stroke-color, #000),
      1px -1px 0 var(--stroke-color, #000),
@@ -42,6 +44,8 @@ html, body, #app {
 }
 
 .lyric-stroke-thick {
+  -webkit-text-stroke: var(--stroke-width, 2px) var(--stroke-color, #000);
+  paint-order: stroke fill;
   text-shadow:
     -2px -2px 0 var(--stroke-color, #000),
      2px -2px 0 var(--stroke-color, #000),

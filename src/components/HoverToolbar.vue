@@ -95,12 +95,15 @@ const closeApp = async () => {
         -0.1s
       </button>
 
-      <span
-        class="px-1.5 py-0.5 rounded font-mono text-[11px] font-bold"
+      <button
+        type="button"
+        @click="emit('adjust-offset', -offsetMs)"
+        class="px-1.5 py-0.5 rounded font-mono text-[11px] font-bold hover:bg-white/15 active:scale-95 transition cursor-pointer"
         :class="offsetMs === 0 ? 'text-slate-300' : offsetMs > 0 ? 'text-emerald-400' : 'text-amber-400'"
+        title="Klik untuk langsung reset offset ke 0ms"
       >
         {{ offsetMs > 0 ? `+${offsetMs}ms` : `${offsetMs}ms` }}
-      </span>
+      </button>
 
       <button
         @click="emit('adjust-offset', 100)"

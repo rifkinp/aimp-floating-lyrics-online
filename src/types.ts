@@ -66,4 +66,5 @@ export interface LrclibRecord {
   instrumental?: boolean;
   plainLyrics?: string;
   syncedLyrics?: string;
+  provider?: string;
 }

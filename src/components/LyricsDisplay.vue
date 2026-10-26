@@ -63,9 +63,11 @@ const styleVariables = computed(() => {
   return {
     '--font-size': `${props.config.fontSize}px`,
     '--secondary-font-size': `${Math.max(props.config.fontSize * 0.72, 14)}px`,
+    '--font-family': props.config.fontFamily || "'Segoe UI', system-ui, -apple-system, sans-serif",
     '--active-color': props.config.activeColor,
     '--secondary-color': props.config.secondaryColor,
     '--stroke-color': props.config.strokeColor,
+    '--stroke-width': `${props.config.strokeWidth ?? 2}px`,
     '--progress': `${lineProgress.value.toFixed(1)}%`,
     '--text-align': props.config.textAlign,
   };
@@ -75,7 +77,7 @@ const styleVariables = computed(() => {
 <template>
   <div
     class="w-full h-full flex flex-col justify-center px-6 transition-all duration-300 pointer-events-none"
-    :style="styleVariables"
+    :style="[styleVariables, { fontFamily: 'var(--font-family)' }]"
     :class="{
       'text-center items-center': config.textAlign === 'center',
       'text-left items-start': config.textAlign === 'left',

@@ -156,32 +156,43 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
 }
 
 fn parse_timestamp(tag: &str) -> Option<u32> {
-    // Format: mm:ss or mm:ss.xx or mm:ss.xxx
-    let parts: Vec<&str> = tag.split(':').collect();
-    if parts.len() != 2 {
-        return None;
+    // Normalizes comma to dot: e.g. "01:23,45" -> "01:23.45"
+    let normalized = tag.replace(',', ".");
+    let parts: Vec<&str> = normalized.split(':').collect();
+
+    // Supports [mm:ss.xx] and [hh:mm:ss.xx]
+    if parts.len() == 2 {
+        let mins: u32 = parts[0].trim().parse().ok()?;
+        let sec_parts: Vec<&str> = parts[1].split('.').collect();
+        let secs: u32 = sec_parts[0].trim().parse().ok()?;
+        let ms: u32 = parse_fraction(sec_parts.get(1).copied().unwrap_or(""));
+        Some(mins * 60_000 + secs * 1_000 + ms)
+    } else if parts.len() == 3 {
+        let hours: u32 = parts[0].trim().parse().ok()?;
+        let mins: u32 = parts[1].trim().parse().ok()?;
+        let sec_parts: Vec<&str> = parts[2].split('.').collect();
+        let secs: u32 = sec_parts[0].trim().parse().ok()?;
+        let ms: u32 = parse_fraction(sec_parts.get(1).copied().unwrap_or(""));
+        Some(hours * 3_600_000 + mins * 60_000 + secs * 1_000 + ms)
+    } else {
+        None
     }
+}
 
-    let mins: u32 = parts[0].trim().parse().ok()?;
-    let sec_parts: Vec<&str> = parts[1].split('.').collect();
-
-    let secs: u32 = sec_parts[0].trim().parse().ok()?;
-    let ms: u32 = if sec_parts.len() > 1 {
-        let frac_str = sec_parts[1].trim();
-        if frac_str.len() == 1 {
-            frac_str.parse::<u32>().ok()? * 100
-        } else if frac_str.len() == 2 {
-            frac_str.parse::<u32>().ok()? * 10
-        } else if frac_str.len() >= 3 {
-            frac_str[..3].parse::<u32>().ok()?
-        } else {
-            0
-        }
+fn parse_fraction(frac_str: &str) -> u32 {
+    let s = frac_str.trim();
+    if s.is_empty() {
+        return 0;
+    }
+    if s.len() == 1 {
+        s.parse::<u32>().unwrap_or(0) * 100
+    } else if s.len() == 2 {
+        s.parse::<u32>().unwrap_or(0) * 10
+    } else if s.len() >= 3 {
+        s[..3].parse::<u32>().unwrap_or(0)
     } else {
         0
-    };
-
-    Some(mins * 60_000 + secs * 1_000 + ms)
+    }
 }
 
 fn parse_enhanced_words(raw: &str) -> (String, Option<Vec<LyricWord>>) {

@@ -11,7 +11,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Listener, Manager, State};
 
 struct AppState {
@@ -172,6 +172,40 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+fn start_global_hotkey_listener(app: AppHandle) {
+    std::thread::Builder::new()
+        .name("global-hotkey".into())
+        .spawn(move || unsafe {
+            use windows::Win32::Foundation::HWND;
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL,
+            };
+            use windows::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
+
+            const HOTKEY_ID: i32 = 0x51A0;
+            // 0x4C is 'L'
+            let registered = RegisterHotKey(
+                HWND::default(),
+                HOTKEY_ID,
+                HOT_KEY_MODIFIERS(MOD_CONTROL.0 | MOD_ALT.0),
+                0x4C,
+            );
+
+            if registered.is_ok() {
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    if msg.message == WM_HOTKEY && msg.wParam.0 as i32 == HOTKEY_ID {
+                        let cfg = load_config();
+                        let new_locked = !cfg.click_through;
+                        let _ = set_click_through(app.clone(), new_locked);
+                    }
+                }
+                let _ = UnregisterHotKey(HWND::default(), HOTKEY_ID);
+            }
+        })
+        .expect("failed to spawn global hotkey thread");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let running = Arc::new(AtomicBool::new(true));
@@ -271,6 +305,20 @@ pub fn run() {
             // Start AIMP background polling task
             start_aimp_polling_task(handle.clone(), running_clone);
 
+            // Start Win32 Global Hotkey listener (Ctrl + Alt + L) for lock/unlock
+            start_global_hotkey_listener(handle.clone());
+
+            // Restore saved window position & size for "main" overlay
+            if let Some(main_window) = app.get_webview_window("main") {
+                let cfg = load_config();
+                if let (Some(x), Some(y)) = (cfg.window_x, cfg.window_y) {
+                    let _ = main_window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                }
+                if let (Some(w), Some(h)) = (cfg.window_width, cfg.window_height) {
+                    let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
+                }
+            }
+
             // Listen to track changed event to automatically resolve lyrics
             let auto_app = handle.clone();
             app.listen("aimp://track-changed", move |event| {
@@ -314,12 +362,35 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let label = window.label();
-                if label == "settings" || label == "search" || label == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    let label = window.label();
+                    if label == "settings" || label == "search" || label == "main" {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
+                tauri::WindowEvent::Moved(pos) => {
+                    if window.label() == "main" {
+                        if pos.x > -10000 && pos.y > -10000 {
+                            let mut cfg = load_config();
+                            cfg.window_x = Some(pos.x);
+                            cfg.window_y = Some(pos.y);
+                            let _ = save_config(&cfg);
+                        }
+                    }
+                }
+                tauri::WindowEvent::Resized(size) => {
+                    if window.label() == "main" {
+                        if size.width > 200 && size.height > 50 {
+                            let mut cfg = load_config();
+                            cfg.window_width = Some(size.width);
+                            cfg.window_height = Some(size.height);
+                            let _ = save_config(&cfg);
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

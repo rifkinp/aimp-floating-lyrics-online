@@ -73,7 +73,7 @@ const handleSearch = async () => {
     });
     results.value = data;
     if (data.length === 0) {
-      errorMessage.value = 'Tidak ada lirik yang ditemukan di LRCLIB untuk kata kunci ini.';
+      errorMessage.value = 'Tidak ada lirik yang ditemukan dari penyedia (LRCLIB / LRC.RED / NetEase) untuk kata kunci ini.';
     }
   } catch (err: any) {
     errorMessage.value = String(err || 'Gagal mencari lirik online.');
@@ -132,7 +132,7 @@ const formatDuration = (secs?: number) => {
     <div class="flex items-center justify-between px-5 py-3.5 bg-slate-900/90 border-b border-slate-800">
       <div class="flex items-center space-x-2.5">
         <Music class="w-5 h-5 text-sky-400" />
-        <h2 class="font-bold text-sm tracking-wide text-white">Manual Lyrics Search (LRCLIB)</h2>
+        <h2 class="font-bold text-sm tracking-wide text-white">Manual Lyrics Search (Multi-Provider)</h2>
       </div>
       <button
         @click="closeSearch"
@@ -180,6 +180,18 @@ const formatDuration = (secs?: number) => {
         <div class="flex-1 min-w-0 pr-4">
           <div class="flex items-center space-x-2">
             <span class="font-bold text-slate-100 text-sm truncate">{{ record.trackName }}</span>
+            <span
+              v-if="record.provider"
+              class="px-2 py-0.5 text-[10px] font-bold rounded-md uppercase"
+              :class="{
+                'bg-sky-500/20 text-sky-300 border border-sky-500/30': record.provider === 'LRCLIB',
+                'bg-amber-500/20 text-amber-300 border border-amber-500/30': record.provider === 'LRC.RED',
+                'bg-rose-500/20 text-rose-300 border border-rose-500/30': record.provider === 'NetEase',
+                'bg-slate-700 text-slate-300 border border-slate-600': !['LRCLIB', 'LRC.RED', 'NetEase'].includes(record.provider)
+              }"
+            >
+              {{ record.provider }}
+            </span>
             <span
               v-if="record.syncedLyrics"
               class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-md"
@@ -239,7 +251,7 @@ const formatDuration = (secs?: number) => {
       <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
         <div class="flex items-center space-x-2">
           <Music class="w-5 h-5 text-sky-400" />
-          <h2 class="font-bold text-sm tracking-wide text-white">Manual Lyrics Search (LRCLIB)</h2>
+          <h2 class="font-bold text-sm tracking-wide text-white">Manual Lyrics Search (Multi-Provider)</h2>
         </div>
         <button
           @click="emit('close')"
@@ -283,6 +295,18 @@ const formatDuration = (secs?: number) => {
           <div class="flex-1 min-w-0 pr-3">
             <div class="flex items-center space-x-2">
               <span class="font-semibold text-slate-100 truncate">{{ record.trackName }}</span>
+              <span
+                v-if="record.provider"
+                class="px-1.5 py-0.5 text-[9px] font-bold rounded uppercase"
+                :class="{
+                  'bg-sky-500/20 text-sky-300 border border-sky-500/30': record.provider === 'LRCLIB',
+                  'bg-amber-500/20 text-amber-300 border border-amber-500/30': record.provider === 'LRC.RED',
+                  'bg-rose-500/20 text-rose-300 border border-rose-500/30': record.provider === 'NetEase',
+                  'bg-slate-700 text-slate-300 border border-slate-600': !['LRCLIB', 'LRC.RED', 'NetEase'].includes(record.provider)
+                }"
+              >
+                {{ record.provider }}
+              </span>
               <span
                 v-if="record.syncedLyrics"
                 class="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded"

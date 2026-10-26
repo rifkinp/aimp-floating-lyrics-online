@@ -47,13 +47,20 @@ const unlistenFns: UnlistenFn[] = [];
 
 const updateInterpolatedClock = () => {
   if (playbackState === 2) {
-    // Playing
+    // Playing: smoothly interpolate clock
     const delta = performance.now() - lastUpdateTimestamp;
     positionMs.value = Math.max(0, Math.floor(lastAimpPositionMs + delta));
+    animFrameId = requestAnimationFrame(updateInterpolatedClock);
   } else {
     positionMs.value = lastAimpPositionMs;
+    animFrameId = null;
   }
-  animFrameId = requestAnimationFrame(updateInterpolatedClock);
+};
+
+const ensureClockRunning = () => {
+  if (windowLabel === 'main' && playbackState === 2 && animFrameId === null) {
+    animFrameId = requestAnimationFrame(updateInterpolatedClock);
+  }
 };
 
 const openSettingsWindow = async () => {
@@ -94,6 +101,7 @@ onMounted(async () => {
     await listen<AimpTrackInfo>('aimp://track-changed', async (event) => {
       track.value = event.payload;
       playbackState = event.payload.state;
+      ensureClockRunning();
 
       if (windowLabel === 'main') {
         isLoading.value = true;
@@ -126,6 +134,7 @@ onMounted(async () => {
       if (track.value) {
         track.value.state = event.payload.state;
       }
+      ensureClockRunning();
     })
   );
 

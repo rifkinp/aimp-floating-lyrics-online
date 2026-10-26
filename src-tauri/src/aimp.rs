@@ -245,12 +245,18 @@ pub fn start_aimp_polling_task(
             let mut last_track = AimpTrackInfo::default();
             let mut last_state = 0;
             let mut last_pos = 0;
+            let mut idle_counter: u32 = 0;
 
             while running.load(Ordering::Relaxed) {
                 let hwnd_opt = AimpReader::find_aimp_window();
-                let mem_opt = AimpReader::read_shared_memory();
+                let mem_opt = if hwnd_opt.is_some() {
+                    AimpReader::read_shared_memory()
+                } else {
+                    None
+                };
 
                 if let Some(mut info) = mem_opt {
+                    idle_counter = 0;
                     let (state, pos, dur) = if let Some(hwnd) = hwnd_opt {
                         AimpReader::get_playback_state(hwnd)
                     } else {
@@ -301,11 +307,14 @@ pub fn start_aimp_polling_task(
                         );
                     }
 
-                    // Optional: If user enabled close_with_aimp in settings, auto-exit when AIMP closes
-                    let cfg = crate::config::load_config();
-                    if cfg.close_with_aimp && hwnd_opt.is_none() && last_track.duration_ms > 0 {
-                        app.exit(0);
-                        break;
+                    idle_counter = idle_counter.wrapping_add(1);
+                    // Check close_with_aimp every ~2 seconds (40 * 50ms) to avoid continuous disk I/O
+                    if idle_counter % 40 == 0 {
+                        let cfg = crate::config::load_config();
+                        if cfg.close_with_aimp && hwnd_opt.is_none() && last_track.duration_ms > 0 {
+                            app.exit(0);
+                            break;
+                        }
                     }
                 }
 
