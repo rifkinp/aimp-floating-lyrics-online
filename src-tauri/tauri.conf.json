@@ -24,6 +24,36 @@
         "skipTaskbar": true,
         "resizable": true,
         "shadow": false
+      },
+      {
+        "label": "settings",
+        "title": "AIMP Floating Lyrics - Settings",
+        "width": 520,
+        "height": 680,
+        "minWidth": 420,
+        "minHeight": 480,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": true,
+        "center": true,
+        "visible": false
+      },
+      {
+        "label": "search",
+        "title": "AIMP Floating Lyrics - Search Lyrics",
+        "width": 660,
+        "height": 600,
+        "minWidth": 500,
+        "minHeight": 450,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": true,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {

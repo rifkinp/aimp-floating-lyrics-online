@@ -262,16 +262,27 @@ impl LrcManager {
         T: serde::de::DeserializeOwned,
     {
         let mut retries = 0;
+        let mut use_app_id = crate::config::get_lrclib_app_id().is_some();
         loop {
             let mut req = make_request();
-            if let Some(app_id) = crate::config::get_lrclib_app_id() {
-                if let Ok(val) = HeaderValue::from_str(&app_id) {
-                    req = req.header("Lrclib-App-Id", val);
+            if use_app_id {
+                if let Some(app_id) = crate::config::get_lrclib_app_id() {
+                    if let Ok(val) = HeaderValue::from_str(&app_id) {
+                        req = req.header("Lrclib-App-Id", val);
+                    }
                 }
             }
             match req.send().await {
                 Ok(resp) => {
                     let status = resp.status();
+                    // If 401 Unauthorized occurs (e.g. unregistered or unverified App ID),
+                    // automatically fall back and retry without Lrclib-App-Id
+                    if status == reqwest::StatusCode::UNAUTHORIZED && use_app_id {
+                        eprintln!("[LRCLIB] Lrclib-App-Id returned 401 Unauthorized. Retrying without App ID...");
+                        use_app_id = false;
+                        continue;
+                    }
+
                     if status == reqwest::StatusCode::TOO_MANY_REQUESTS
                         || status == reqwest::StatusCode::SERVICE_UNAVAILABLE
                     {

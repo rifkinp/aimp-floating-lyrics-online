@@ -30,8 +30,30 @@ fn get_app_config() -> AppConfig {
 }
 
 #[tauri::command]
-fn save_app_config(config: AppConfig) -> Result<(), String> {
-    save_config(&config)
+fn save_app_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
+    save_config(&config)?;
+    let _ = app.emit("config://updated", &config);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_search_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("search") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -75,6 +97,7 @@ async fn search_lyrics_online(
 
 #[tauri::command]
 fn apply_lyrics(
+    app: AppHandle,
     audio_path: String,
     artist: String,
     title: String,
@@ -82,6 +105,7 @@ fn apply_lyrics(
 ) -> Result<ParsedLyrics, String> {
     let parsed = parse_lrc(&raw_lrc);
     let _ = LrcManager::save_custom_lrc(&audio_path, &artist, &title, &raw_lrc);
+    let _ = app.emit("lyrics://loaded", &parsed);
     Ok(parsed)
 }
 
@@ -158,10 +182,10 @@ pub fn run() {
                         let _ = set_click_through(app.clone(), new_state);
                     }
                     "manual_search" => {
-                        let _ = app.emit("ui://open-manual-search", ());
+                        let _ = open_search_window(app.clone());
                     }
                     "settings" => {
-                        let _ = app.emit("ui://open-settings", ());
+                        let _ = open_settings_window(app.clone());
                     }
                     "quit" => {
                         app.exit(0);
@@ -231,6 +255,15 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if label == "settings" || label == "search" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_current_track,
             get_app_config,
@@ -240,6 +273,8 @@ pub fn run() {
             search_lyrics_online,
             apply_lyrics,
             adjust_offset,
+            open_settings_window,
+            open_search_window,
             quit_app
         ])
         .run(tauri::generate_context!())

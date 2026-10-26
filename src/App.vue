@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import HoverToolbar from './components/HoverToolbar.vue';
 import LyricsDisplay from './components/LyricsDisplay.vue';
 import ManualSearchModal from './components/ManualSearchModal.vue';
@@ -13,14 +14,15 @@ import type {
   AppConfig
 } from './types';
 
+const currentWindow = getCurrentWebviewWindow();
+const windowLabel = currentWindow.label; // 'main' | 'settings' | 'search'
+
 // App state
 const track = ref<AimpTrackInfo | null>(null);
 const lyrics = ref<ParsedLyrics | null>(null);
 const isLoading = ref(false);
 const isHovered = ref(false);
 const isLocked = ref(false);
-const showSearchModal = ref(false);
-const showSettingsModal = ref(false);
 
 const config = ref<AppConfig>({
   clickThrough: false,
@@ -54,6 +56,22 @@ const updateInterpolatedClock = () => {
   animFrameId = requestAnimationFrame(updateInterpolatedClock);
 };
 
+const openSettingsWindow = async () => {
+  try {
+    await invoke('open_settings_window');
+  } catch (err) {
+    console.error('Failed to open settings window:', err);
+  }
+};
+
+const openSearchWindow = async () => {
+  try {
+    await invoke('open_search_window');
+  } catch (err) {
+    console.error('Failed to open search window:', err);
+  }
+};
+
 onMounted(async () => {
   // 1. Load user configuration
   try {
@@ -66,31 +84,36 @@ onMounted(async () => {
     console.error('Failed to load config:', err);
   }
 
-  // 2. Start smooth interpolation loop
-  animFrameId = requestAnimationFrame(updateInterpolatedClock);
+  // 2. Start smooth interpolation loop (for main window)
+  if (windowLabel === 'main') {
+    animFrameId = requestAnimationFrame(updateInterpolatedClock);
+  }
 
   // 3. Register Tauri Event Listeners
   unlistenFns.push(
     await listen<AimpTrackInfo>('aimp://track-changed', async (event) => {
       track.value = event.payload;
       playbackState = event.payload.state;
-      isLoading.value = true;
-      lyrics.value = null;
 
-      // Automatically resolve lyrics
-      try {
-        const result = await invoke<ParsedLyrics>('resolve_lyrics', {
-          audioPath: event.payload.fileName,
-          artist: event.payload.artist,
-          title: event.payload.title,
-          album: event.payload.album,
-          durationMs: event.payload.durationMs,
-        });
-        lyrics.value = result;
-      } catch (err) {
-        console.warn('Lyrics resolution:', err);
-      } finally {
-        isLoading.value = false;
+      if (windowLabel === 'main') {
+        isLoading.value = true;
+        lyrics.value = null;
+
+        // Automatically resolve lyrics
+        try {
+          const result = await invoke<ParsedLyrics>('resolve_lyrics', {
+            audioPath: event.payload.fileName,
+            artist: event.payload.artist,
+            title: event.payload.title,
+            album: event.payload.album,
+            durationMs: event.payload.durationMs,
+          });
+          lyrics.value = result;
+        } catch (err) {
+          console.warn('Lyrics resolution:', err);
+        } finally {
+          isLoading.value = false;
+        }
       }
     })
   );
@@ -127,14 +150,21 @@ onMounted(async () => {
   );
 
   unlistenFns.push(
+    await listen<AppConfig>('config://updated', (event) => {
+      config.value = event.payload;
+      isLocked.value = event.payload.clickThrough;
+    })
+  );
+
+  unlistenFns.push(
     await listen('ui://open-manual-search', () => {
-      showSearchModal.value = true;
+      openSearchWindow();
     })
   );
 
   unlistenFns.push(
     await listen('ui://open-settings', () => {
-      showSettingsModal.value = true;
+      openSettingsWindow();
     })
   );
 
@@ -144,20 +174,22 @@ onMounted(async () => {
     if (cur && cur.title) {
       track.value = cur;
       playbackState = cur.state;
-      isLoading.value = true;
-      try {
-        const result = await invoke<ParsedLyrics>('resolve_lyrics', {
-          audioPath: cur.fileName,
-          artist: cur.artist,
-          title: cur.title,
-          album: cur.album,
-          durationMs: cur.durationMs,
-        });
-        lyrics.value = result;
-      } catch (err) {
-        console.warn('Initial lyrics resolution:', err);
-      } finally {
-        isLoading.value = false;
+      if (windowLabel === 'main') {
+        isLoading.value = true;
+        try {
+          const result = await invoke<ParsedLyrics>('resolve_lyrics', {
+            audioPath: cur.fileName,
+            artist: cur.artist,
+            title: cur.title,
+            album: cur.album,
+            durationMs: cur.durationMs,
+          });
+          lyrics.value = result;
+        } catch (err) {
+          console.warn('Initial lyrics resolution:', err);
+        } finally {
+          isLoading.value = false;
+        }
       }
     }
   } catch (err) {
@@ -165,7 +197,9 @@ onMounted(async () => {
   }
 
   // Global hotkey: Ctrl + Alt + L to toggle lock
-  window.addEventListener('keydown', handleKeydown);
+  if (windowLabel === 'main') {
+    window.addEventListener('keydown', handleKeydown);
+  }
 });
 
 onUnmounted(() => {
@@ -222,13 +256,33 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
 </script>
 
 <template>
+  <!-- Window 1: Dedicated Settings Popup -->
+  <SettingsModal
+    v-if="windowLabel === 'settings'"
+    :standalone="true"
+    :config="config"
+    @close="currentWindow.hide()"
+    @update-config="handleUpdateConfig"
+  />
+
+  <!-- Window 2: Dedicated Manual Search Popup -->
+  <ManualSearchModal
+    v-else-if="windowLabel === 'search'"
+    :standalone="true"
+    :track="track"
+    @close="currentWindow.hide()"
+    @lyrics-applied="onLyricsApplied"
+  />
+
+  <!-- Window 3: Main Floating Lyrics Overlay -->
   <main
+    v-else
     @mouseenter="isHovered = true"
     @mouseleave="isHovered = false"
     @mousemove="isHovered = true"
     class="relative w-screen h-screen flex flex-col justify-between overflow-hidden transition-all duration-200"
     :class="[
-      !isLocked && (isHovered || showSearchModal || showSettingsModal)
+      !isLocked && isHovered
         ? 'bg-slate-950/85 backdrop-blur-md rounded-2xl border border-white/15 shadow-2xl'
         : (!isLocked ? 'bg-slate-950/[0.02]' : 'bg-transparent')
     ]"
@@ -237,15 +291,15 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
     <div
       v-if="!isLocked"
       class="w-full pt-2 px-3 transition-opacity duration-200 z-30"
-      :class="isHovered || showSearchModal || showSettingsModal ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
+      :class="isHovered ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'"
     >
       <HoverToolbar
         :track="track"
         :offset-ms="lyrics?.offsetMs || 0"
         :is-locked="isLocked"
         @lock="toggleLock"
-        @open-search="showSearchModal = true"
-        @open-settings="showSettingsModal = true"
+        @open-search="openSearchWindow"
+        @open-settings="openSettingsWindow"
         @adjust-offset="handleAdjustOffset"
       />
     </div>
@@ -260,20 +314,5 @@ const onLyricsApplied = (newLyrics: ParsedLyrics) => {
         :is-loading="isLoading"
       />
     </div>
-
-    <!-- Modals -->
-    <ManualSearchModal
-      v-if="showSearchModal"
-      :track="track"
-      @close="showSearchModal = false"
-      @lyrics-applied="onLyricsApplied"
-    />
-
-    <SettingsModal
-      v-if="showSettingsModal"
-      :config="config"
-      @close="showSettingsModal = false"
-      @update-config="handleUpdateConfig"
-    />
   </main>
 </template>
