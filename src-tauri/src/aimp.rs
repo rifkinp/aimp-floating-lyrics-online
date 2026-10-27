@@ -135,7 +135,7 @@ impl AimpReader {
                 LPARAM(0),
             );
 
-            let state = (state_res.0 as u32).min(3);
+            let state = state_res_to_u32(state_res.0).min(2);
             let pos = state_res_to_u32(pos_res.0);
             let dur = state_res_to_u32(dur_res.0);
 
@@ -295,8 +295,8 @@ pub fn start_aimp_polling_task(
                         let _ = app.emit("aimp://track-changed", &info);
                     }
 
-                    // Emit position update when playing or paused, or when state changed
-                    if state != last_state || (state == 2 && pos != last_pos) {
+                    // Emit position update when playing, paused, or when position / state changed
+                    if state != last_state || pos != last_pos {
                         last_state = state;
                         last_pos = pos;
                         let _ = app.emit(
@@ -308,6 +308,8 @@ pub fn start_aimp_polling_task(
                             },
                         );
                     }
+
+                    std::thread::sleep(Duration::from_millis(50));
                 } else {
                     // Shared memory not found or empty
                     if last_state != 0 {
@@ -324,17 +326,18 @@ pub fn start_aimp_polling_task(
                     }
 
                     idle_counter = idle_counter.wrapping_add(1);
-                    // Check close_with_aimp every ~2 seconds (40 * 50ms) to avoid continuous disk I/O
-                    if idle_counter % 40 == 0 {
+                    // Check close_with_aimp every ~2 seconds (5 * 400ms) to avoid continuous disk I/O
+                    if idle_counter % 5 == 0 {
                         let cfg = crate::config::load_config();
                         if cfg.close_with_aimp && hwnd_opt.is_none() && last_track.duration_ms > 0 {
                             app.exit(0);
                             break;
                         }
                     }
-                }
 
-                std::thread::sleep(Duration::from_millis(50));
+                    // Adaptive sleep: lower CPU consumption when AIMP is idle or not running
+                    std::thread::sleep(Duration::from_millis(400));
+                }
             }
         })
         .expect("failed to spawn aimp polling thread")

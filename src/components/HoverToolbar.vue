@@ -253,7 +253,7 @@ const closeApp = async () => {
         <button
           @click="emit('lock')"
           class="flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 transition active:scale-95"
-          title="Lock Window (Click-Through mode). Unlock anytime via System Tray!"
+          title="Lock Window (Click-Through mode). Unlock anytime via badge icon di kanan atas, Ctrl+Alt+L, atau System Tray!"
         >
           <Lock class="w-3 h-3" />
           <span class="text-[11px]">Lock</span>

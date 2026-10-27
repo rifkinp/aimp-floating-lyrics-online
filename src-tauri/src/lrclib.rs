@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USER_AGENT: &str = "AIMP-Floating-Lyrics-Online v0.2.0 (https://github.com/rifkinp/aimp-floating-lyrics-online)";
-const LRCLIB_CLIENT: &str = "AIMP-Floating-Lyrics-Online v0.2.0";
+const USER_AGENT: &str = "AIMP-Floating-Lyrics-Online v2.0.1 (https://github.com/rifkinp/aimp-floating-lyrics-online)";
+const LRCLIB_CLIENT: &str = "AIMP-Floating-Lyrics-Online v2.0.1";
 const API_BASE: &str = "https://lrclib.net/api";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +59,26 @@ pub fn clean_title_and_artist(artist: &str, title: &str, file_path: &str) -> (St
 
     // 4. Remove parenthesized tags if they contain video/audio/remaster
     clean_t = clean_parenthesized_junk(&clean_t);
+
+    // 4b. Remove leading track numbering if present (e.g. "01. ", "01 - ", "1. ", "02_")
+    clean_t = clean_t.trim().to_string();
+    let mut num_digits = 0;
+    for c in clean_t.chars() {
+        if c.is_ascii_digit() {
+            num_digits += 1;
+        } else {
+            break;
+        }
+    }
+    if num_digits > 0 && num_digits <= 3 && num_digits < clean_t.len() {
+        let remainder = &clean_t[num_digits..];
+        if remainder.starts_with('.') || remainder.starts_with('-') || remainder.starts_with('_') {
+            let candidate = remainder.trim_start_matches(|c: char| c == '.' || c == '-' || c == '_' || c.is_whitespace()).trim();
+            if !candidate.is_empty() {
+                clean_t = candidate.to_string();
+            }
+        }
+    }
 
     let mut clean_t = clean_t.trim().to_string();
     let mut clean_a = artist.trim().to_string();
@@ -372,12 +392,28 @@ impl LrcManager {
             query.push(("album_name", album));
         }
 
-        self.execute_with_retry(|| {
+        let res = self.execute_with_retry(|| {
             self.client
                 .get(format!("{}/get", API_BASE))
                 .query(&query)
         })
-        .await
+        .await;
+
+        // If exact match with album failed, retry without album_name (album names often mismatch or differ in edition)
+        if res.is_err() && !album.is_empty() {
+            let mut fallback_query = vec![("track_name", title), ("artist_name", artist)];
+            if duration_secs > 0 {
+                fallback_query.push(("duration", &dur_str));
+            }
+            return self.execute_with_retry(|| {
+                self.client
+                    .get(format!("{}/get", API_BASE))
+                    .query(&fallback_query)
+            })
+            .await;
+        }
+
+        res
     }
 
     pub async fn search_tracks(
@@ -671,7 +707,7 @@ impl LrcManager {
             }
         }
 
-        if target_duration_secs > 0.0 && min_diff > 8000 {
+        if target_duration_secs > 0.0 && min_diff > 15000 {
             return None;
         }
 

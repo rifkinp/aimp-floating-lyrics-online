@@ -84,6 +84,15 @@ const openSearchWindow = async () => {
   }
 };
 
+const openEditorWindow = async () => {
+  try {
+    await invoke('open_editor_window');
+  } catch (err) {
+    console.error('Failed to open editor window:', err);
+    showEditor.value = true;
+  }
+};
+
 onMounted(async () => {
   // 1. Load user configuration
   try {
@@ -394,6 +403,17 @@ const unlockFromBadge = async () => {
     </div>
   </div>
 
+  <!-- Window 5: Dedicated LRC Editor Window -->
+  <LrcEditorModal
+    v-else-if="windowLabel === 'editor'"
+    :standalone="true"
+    :track="track"
+    :lyrics="lyrics"
+    :current-position-ms="positionMs"
+    @close="hideCurrentWindow"
+    @saved="onLyricsSaved"
+  />
+
   <!-- Window 3: Main Floating Lyrics Overlay -->
   <main
     v-else
@@ -421,7 +441,7 @@ const unlockFromBadge = async () => {
         @lock="toggleLock"
         @open-search="openSearchWindow"
         @open-settings="openSettingsWindow"
-        @open-editor="showEditor = true"
+        @open-editor="openEditorWindow"
         @adjust-offset="handleAdjustOffset"
         @toggle-full-lyrics="showFullLyrics = !showFullLyrics"
         @dock="handleDock"

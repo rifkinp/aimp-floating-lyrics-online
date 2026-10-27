@@ -24,7 +24,8 @@ Versi rilis siap pakai (*portable*, tanpa perlu instalasi rumit) dapat langsung 
 
 | Versi | Tipe Berkas | Target Sistem | Tautan Unduhan Langsung | Ukuran |
 | :--- | :--- | :--- | :--- | :--- |
-| **v0.2.0 (Latest)** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 **AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.2.0/AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip) | ~8.3 MB |
+| **v2.0.1 (Latest)** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 **AIMP-Floating-Lyrics-v2.0.1-windows-x64.zip**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v2.0.1/AIMP-Floating-Lyrics-v2.0.1-windows-x64.zip) | ~8.4 MB |
+| **v0.2.0** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.2.0/AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip) | ~8.3 MB |
 | **v0.1.0** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.1.0/AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip) | ~8.3 MB |
 
 > [!TIP]

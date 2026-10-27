@@ -254,6 +254,27 @@ const resetSourcePriority = () => {
   localConfig.value.sourcePriority = ['local', 'lrclib', 'netease', 'lrcred', 'cache'];
   handleSliderChange();
 };
+
+const isClearingCache = ref(false);
+const cacheClearedMessage = ref('');
+
+const clearOfflineCache = async () => {
+  if (!confirm('Hapus semua file lirik .lrc yang tersimpan di cache offline? Lirik lokal di samping file lagu tidak akan terpengaruh.')) {
+    return;
+  }
+  isClearingCache.value = true;
+  try {
+    const count = await invoke<number>('clear_cache');
+    cacheClearedMessage.value = `Berhasil menghapus ${count} file lirik dari cache!`;
+    setTimeout(() => {
+      cacheClearedMessage.value = '';
+    }, 3500);
+  } catch (err) {
+    console.error('Failed to clear cache:', err);
+  } finally {
+    isClearingCache.value = false;
+  }
+};
 </script>
 
 <template>
@@ -786,6 +807,27 @@ const resetSourcePriority = () => {
           Application ID dari LRCLIB Developer Portal. Jika ID belum aktif/terverifikasi, sistem otomatis fallback menggunakan client publik agar pencarian lirik tetap berjalan lancar.
         </div>
       </div>
+
+      <!-- Offline Cache Management -->
+      <div class="pt-3 border-t border-slate-800 space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-200 text-xs">Offline Lyrics Cache</span>
+          <button
+            type="button"
+            @click="clearOfflineCache"
+            :disabled="isClearingCache"
+            class="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition active:scale-95 disabled:opacity-50"
+          >
+            {{ isClearingCache ? 'Membersihkan...' : 'Bersihkan Cache' }}
+          </button>
+        </div>
+        <div v-if="cacheClearedMessage" class="text-[11px] text-emerald-400 font-semibold animate-pulse">
+          {{ cacheClearedMessage }}
+        </div>
+        <div v-else class="text-[11px] text-slate-400 leading-relaxed">
+          Menghapus seluruh file lirik yang tersimpan di cache AppData. Gunakan fitur ini jika ada lirik salah yang terlanjur tersimpan di cache.
+        </div>
+      </div>
     </div>
 
     <!-- Footer -->
@@ -1311,6 +1353,27 @@ const resetSourcePriority = () => {
           />
           <div class="text-[10px] text-slate-400">
             Mengumumkan Application ID ke LRCLIB API untuk verifikasi & bypass rate-limit. Juga dapat diisi via file <code class="text-sky-300">.env</code>.
+          </div>
+        </div>
+
+        <!-- Offline Cache Management -->
+        <div class="pt-2 border-t border-slate-800 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-200">Offline Lyrics Cache</span>
+            <button
+              type="button"
+              @click="clearOfflineCache"
+              :disabled="isClearingCache"
+              class="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-medium transition active:scale-95 disabled:opacity-50"
+            >
+              {{ isClearingCache ? 'Membersihkan...' : 'Bersihkan Cache' }}
+            </button>
+          </div>
+          <div v-if="cacheClearedMessage" class="text-[10px] text-emerald-400 font-semibold animate-pulse">
+            {{ cacheClearedMessage }}
+          </div>
+          <div v-else class="text-[10px] text-slate-400">
+            Menghapus cache lirik offline di folder AppData.
           </div>
         </div>
       </div>

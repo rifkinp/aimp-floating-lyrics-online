@@ -75,6 +75,35 @@ fn open_search_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_editor_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("editor") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_cache() -> Result<usize, String> {
+    let cache_dir = config::get_cache_dir();
+    let mut count = 0;
+    if cache_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if std::fs::remove_file(path).is_ok() {
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(count)
+}
+
+#[tauri::command]
 fn hide_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
     let lbl = label.as_deref().unwrap_or("main");
     if let Some(window) = app.get_webview_window(lbl) {
@@ -650,7 +679,7 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     let label = window.label();
-                    if label == "settings" || label == "search" || label == "main" || label == "unlock" {
+                    if label == "settings" || label == "search" || label == "main" || label == "unlock" || label == "editor" {
                         api.prevent_close();
                         let _ = window.hide();
                     }
@@ -709,6 +738,8 @@ pub fn run() {
             adjust_offset,
             open_settings_window,
             open_search_window,
+            open_editor_window,
+            clear_cache,
             hide_window,
             minimize_window,
             show_main_window,

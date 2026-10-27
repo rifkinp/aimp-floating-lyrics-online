@@ -134,7 +134,7 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
                     remaining_text[7..].trim()
                 };
                 for ts in &timestamps {
-                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 50) {
+                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 500) {
                         existing.translation = Some(clean_tr.to_string());
                     } else {
                         lines.push(LyricLine {
@@ -157,7 +157,7 @@ pub fn parse_lrc(content: &str) -> ParsedLyrics {
                     remaining_text[6..].trim()
                 };
                 for ts in &timestamps {
-                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 50) {
+                    if let Some(existing) = lines.iter_mut().find(|l| (l.time_ms as i64 - *ts as i64).abs() < 500) {
                         existing.romaji = Some(clean_ro.to_string());
                     }
                 }
