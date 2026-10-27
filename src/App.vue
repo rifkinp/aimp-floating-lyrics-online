@@ -9,6 +9,7 @@ import FullLyricsView from './components/FullLyricsView.vue';
 import ManualSearchModal from './components/ManualSearchModal.vue';
 import SettingsModal from './components/SettingsModal.vue';
 import LrcEditorModal from './components/LrcEditorModal.vue';
+import { Lock, Unlock } from 'lucide-vue-next';
 import type {
   AimpTrackInfo,
   AimpPositionUpdate,
@@ -348,6 +349,15 @@ const hideCurrentWindow = async () => {
     currentWindow.hide();
   }
 };
+
+const unlockFromBadge = async () => {
+  try {
+    await invoke('set_click_through', { locked: false });
+    isLocked.value = false;
+  } catch (err) {
+    console.error('Failed to unlock from badge:', err);
+  }
+};
 </script>
 
 <template>
@@ -368,6 +378,21 @@ const hideCurrentWindow = async () => {
     @close="hideCurrentWindow"
     @lyrics-applied="onLyricsApplied"
   />
+
+  <!-- Window 4: Dedicated Mini Unlock Button for Click-Through Mode -->
+  <div
+    v-else-if="windowLabel === 'unlock'"
+    @click="unlockFromBadge"
+    class="w-full h-full flex items-center justify-center cursor-pointer select-none group bg-transparent p-0.5"
+    title="Jendela terkunci (Click-Through). Klik di sini atau tekan Ctrl+Alt+L untuk membuka kunci"
+  >
+    <div
+      class="w-8 h-8 rounded-full bg-slate-900/95 hover:bg-red-500 border border-amber-400/80 hover:border-red-300 text-amber-300 hover:text-white flex items-center justify-center shadow-2xl transition-all duration-200 transform hover:scale-110 active:scale-90 animate-pulse hover:animate-none"
+    >
+      <Lock class="w-4 h-4 group-hover:hidden" />
+      <Unlock class="w-4 h-4 hidden group-hover:block" />
+    </div>
+  </div>
 
   <!-- Window 3: Main Floating Lyrics Overlay -->
   <main

@@ -155,7 +155,7 @@ impl LrcManager {
         get_cache_dir().join(format!("{}.lrc", sanitized))
     }
 
-    /// Primary resolver following Priority Order (Local -> Cache -> LRCLIB get -> LRCLIB search)
+    /// Primary resolver dynamically following User Config Priority & Enabled Sources
     pub async fn resolve_lyrics(
         &self,
         audio_path: &str,
@@ -164,115 +164,135 @@ impl LrcManager {
         album: &str,
         duration_ms: u32,
     ) -> Result<ParsedLyrics, String> {
-        // Step 1: Check Local File
-        if let Some(local_path) = Self::get_local_lrc_path(audio_path) {
-            if local_path.exists() {
-                if let Ok(content) = fs::read_to_string(&local_path) {
-                    let parsed = parse_lrc(&content);
-                    if parsed.is_synced || !parsed.plain_text.is_empty() {
-                        return Ok(parsed);
-                    }
-                }
-            }
-        }
+        let cfg = load_config();
+        let enabled = &cfg.enabled_sources;
+        let priority = &cfg.source_priority;
+
+        let is_enabled = |src: &str| -> bool {
+            enabled.iter().any(|s| s.eq_ignore_ascii_case(src))
+        };
 
         // Clean query terms (strips URLs, pipes, [stafaband], blogspot, etc.)
         let (clean_artist, clean_title) = clean_title_and_artist(artist, title, audio_path);
-
-        // Step 2: Check App Cache Directory
-        let cache_path = Self::get_cache_lrc_path(&clean_artist, &clean_title);
-        if cache_path.exists() {
-            if let Ok(content) = fs::read_to_string(&cache_path) {
-                let parsed = parse_lrc(&content);
-                if parsed.is_synced || !parsed.plain_text.is_empty() {
-                    return Ok(parsed);
-                }
-            }
-        }
-
-        if clean_title.is_empty() {
-            return Err("Empty track title".to_string());
-        }
-
         let duration_secs = (duration_ms / 1000).max(1);
-
-        // Step 3: LRCLIB Exact Match (/api/get)
-        let exact_result = self
-            .fetch_exact(&clean_artist, &clean_title, album.trim(), duration_secs)
-            .await;
-
-        if let Ok(mut record) = exact_result {
-            record.provider = Some("LRCLIB".to_string());
-            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
-                return Ok(parsed);
-            }
-        }
-
         let target_dur = duration_secs as f64;
 
-        // Step 4: LRC.RED Provider (High quality line & word sync)
-        if let Some(record) = self.fetch_lrcred(&clean_artist, &clean_title, target_dur).await {
-            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
-                return Ok(parsed);
+        // Iterate through user's prioritized sources
+        for source in priority {
+            if !is_enabled(source) {
+                continue;
             }
-        }
 
-        // Step 5: LRCLIB Search Fallback (/api/search)
-        let mut search_results = self.search_tracks(&clean_artist, &clean_title).await.unwrap_or_default();
-
-        // If no results and artist was given, search by title alone as fallback
-        if search_results.is_empty() && !clean_artist.is_empty() {
-            if let Ok(by_title) = self.search_tracks("", &clean_title).await {
-                search_results = by_title;
-            }
-        }
-
-        // Pick best matching record with synced lyrics from LRCLIB
-        let mut best_record: Option<LrclibRecord> = None;
-        let mut min_diff = f64::MAX;
-
-        for rec in &search_results {
-            if rec.synced_lyrics.is_some() {
-                let dur = rec.duration.unwrap_or(0.0);
-                let diff = (dur - target_dur).abs();
-                if diff < min_diff {
-                    min_diff = diff;
-                    let mut r = rec.clone();
-                    if r.provider.is_none() {
-                        r.provider = Some("LRCLIB".to_string());
+            match source.to_lowercase().as_str() {
+                "local" => {
+                    // Check Local File (.lrc beside audio)
+                    if let Some(local_path) = Self::get_local_lrc_path(audio_path) {
+                        if local_path.exists() {
+                            if let Ok(content) = fs::read_to_string(&local_path) {
+                                let parsed = parse_lrc(&content);
+                                if parsed.is_synced || !parsed.plain_text.is_empty() {
+                                    return Ok(parsed);
+                                }
+                            }
+                        }
                     }
-                    best_record = Some(r);
+                }
+                "cache" => {
+                    // Check App Cache Directory
+                    let cache_path = Self::get_cache_lrc_path(&clean_artist, &clean_title);
+                    if cache_path.exists() {
+                        if let Ok(content) = fs::read_to_string(&cache_path) {
+                            let parsed = parse_lrc(&content);
+                            if parsed.is_synced || !parsed.plain_text.is_empty() {
+                                return Ok(parsed);
+                            }
+                        }
+                    }
+                }
+                "lrclib" => {
+                    if !clean_title.is_empty() {
+                        // LRCLIB Exact Match (/api/get)
+                        if let Ok(mut record) = self.fetch_exact(&clean_artist, &clean_title, album.trim(), duration_secs).await {
+                            record.provider = Some("LRCLIB".to_string());
+                            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
+                                return Ok(parsed);
+                            }
+                        }
+
+                        // LRCLIB Search Fallback (/api/search)
+                        let mut search_results = self.search_tracks(&clean_artist, &clean_title).await.unwrap_or_default();
+                        if search_results.is_empty() && !clean_artist.is_empty() {
+                            if let Ok(by_title) = self.search_tracks("", &clean_title).await {
+                                search_results = by_title;
+                            }
+                        }
+
+                        let mut best_record: Option<LrclibRecord> = None;
+                        let mut min_diff = f64::MAX;
+                        for rec in &search_results {
+                            if rec.synced_lyrics.is_some() {
+                                let dur = rec.duration.unwrap_or(0.0);
+                                let diff = (dur - target_dur).abs();
+                                if diff < min_diff {
+                                    min_diff = diff;
+                                    let mut r = rec.clone();
+                                    if r.provider.is_none() {
+                                        r.provider = Some("LRCLIB".to_string());
+                                    }
+                                    best_record = Some(r);
+                                }
+                            }
+                        }
+
+                        if let Some(record) = &best_record {
+                            if let Some(parsed) = self.process_and_save_record(record, audio_path, &clean_artist, &clean_title) {
+                                return Ok(parsed);
+                            }
+                        }
+                    }
+                }
+                "netease" => {
+                    if !clean_title.is_empty() {
+                        // NetEase Cloud Music Provider (Massive library + translations & romaji)
+                        if let Some(record) = self.fetch_netease(&clean_artist, &clean_title, target_dur).await {
+                            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
+                                return Ok(parsed);
+                            }
+                        }
+                    }
+                }
+                "lrcred" => {
+                    if !clean_title.is_empty() {
+                        // LRC.RED Provider (High quality line & word sync)
+                        if let Some(record) = self.fetch_lrcred(&clean_artist, &clean_title, target_dur).await {
+                            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
+                                return Ok(parsed);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Final fallback: plain lyrics from LRCLIB if LRCLIB is enabled and nothing synced found
+        if is_enabled("lrclib") && !clean_title.is_empty() {
+            if let Ok(search_results) = self.search_tracks(&clean_artist, &clean_title).await {
+                for rec in &search_results {
+                    if rec.plain_lyrics.is_some() {
+                        let mut r = rec.clone();
+                        if r.provider.is_none() {
+                            r.provider = Some("LRCLIB".to_string());
+                        }
+                        if let Some(parsed) = self.process_and_save_record(&r, audio_path, &clean_artist, &clean_title) {
+                            return Ok(parsed);
+                        }
+                    }
                 }
             }
         }
 
-        if let Some(record) = &best_record {
-            if let Some(parsed) = self.process_and_save_record(record, audio_path, &clean_artist, &clean_title) {
-                return Ok(parsed);
-            }
-        }
-
-        // Step 6: NetEase Cloud Music Provider (Massive Asian / Japanese / Korean / Indo library)
-        if let Some(record) = self.fetch_netease(&clean_artist, &clean_title, target_dur).await {
-            if let Some(parsed) = self.process_and_save_record(&record, audio_path, &clean_artist, &clean_title) {
-                return Ok(parsed);
-            }
-        }
-
-        // Step 7: Fallback to plain lyrics from LRCLIB if no synced lyrics found
-        for rec in &search_results {
-            if rec.plain_lyrics.is_some() {
-                let mut r = rec.clone();
-                if r.provider.is_none() {
-                    r.provider = Some("LRCLIB".to_string());
-                }
-                if let Some(parsed) = self.process_and_save_record(&r, audio_path, &clean_artist, &clean_title) {
-                    return Ok(parsed);
-                }
-            }
-        }
-
-        Err("No lyrics found online across all providers".to_string())
+        Err("No lyrics found online across active providers".to_string())
     }
 
     async fn execute_with_retry<T, F>(&self, make_request: F) -> Result<T, String>

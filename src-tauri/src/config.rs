@@ -27,6 +27,8 @@ pub struct AppConfig {
     pub enable_glassmorphism: bool,
     pub dock_position: String,    // "none" | "bottom-taskbar" | "top-screen"
     pub target_monitor: Option<usize>,
+    pub enabled_sources: Vec<String>,
+    pub source_priority: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -54,6 +56,20 @@ impl Default for AppConfig {
             enable_glassmorphism: true,
             dock_position: "none".to_string(),
             target_monitor: None,
+            enabled_sources: vec![
+                "local".to_string(),
+                "lrclib".to_string(),
+                "netease".to_string(),
+                "lrcred".to_string(),
+                "cache".to_string(),
+            ],
+            source_priority: vec![
+                "local".to_string(),
+                "lrclib".to_string(),
+                "netease".to_string(),
+                "lrcred".to_string(),
+                "cache".to_string(),
+            ],
         }
     }
 }

@@ -79,6 +79,11 @@ fn hide_window(app: AppHandle, label: Option<String>) -> Result<(), String> {
     let lbl = label.as_deref().unwrap_or("main");
     if let Some(window) = app.get_webview_window(lbl) {
         window.hide().map_err(|e| e.to_string())?;
+        if lbl == "main" {
+            if let Some(u) = app.get_webview_window("unlock") {
+                let _ = u.hide();
+            }
+        }
     }
     Ok(())
 }
@@ -88,6 +93,11 @@ fn minimize_window(app: AppHandle, label: Option<String>) -> Result<(), String> 
     let lbl = label.as_deref().unwrap_or("main");
     if let Some(window) = app.get_webview_window(lbl) {
         window.minimize().map_err(|e| e.to_string())?;
+        if lbl == "main" {
+            if let Some(u) = app.get_webview_window("unlock") {
+                let _ = u.hide();
+            }
+        }
     }
     Ok(())
 }
@@ -99,6 +109,19 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
         let _ = window.show();
         let _ = window.set_always_on_top(true);
         let _ = window.set_focus();
+
+        let cfg = load_config();
+        if cfg.click_through {
+            if let Some(unlock_win) = app.get_webview_window("unlock") {
+                if let (Ok(main_pos), Ok(main_size)) = (window.outer_position(), window.outer_size()) {
+                    let badge_x = main_pos.x + main_size.width as i32 - 44;
+                    let badge_y = main_pos.y + 8;
+                    let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                    let _ = unlock_win.show();
+                    let _ = unlock_win.set_always_on_top(true);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -108,11 +131,27 @@ fn toggle_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
+            if let Some(unlock_win) = app.get_webview_window("unlock") {
+                let _ = unlock_win.hide();
+            }
         } else {
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_always_on_top(true);
             let _ = window.set_focus();
+
+            let cfg = load_config();
+            if cfg.click_through {
+                if let Some(unlock_win) = app.get_webview_window("unlock") {
+                    if let (Ok(main_pos), Ok(main_size)) = (window.outer_position(), window.outer_size()) {
+                        let badge_x = main_pos.x + main_size.width as i32 - 44;
+                        let badge_y = main_pos.y + 8;
+                        let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                        let _ = unlock_win.show();
+                        let _ = unlock_win.set_always_on_top(true);
+                    }
+                }
+            }
         }
     }
     Ok(())
@@ -130,6 +169,21 @@ fn set_click_through(app: AppHandle, locked: bool) -> Result<(), String> {
         let _ = save_config(&cfg);
 
         let _ = app.emit("lyrics://lock-changed", locked);
+
+        // Manage floating unlock badge window
+        if let Some(unlock_win) = app.get_webview_window("unlock") {
+            if locked {
+                if let (Ok(main_pos), Ok(main_size)) = (window.outer_position(), window.outer_size()) {
+                    let badge_x = main_pos.x + main_size.width as i32 - 44;
+                    let badge_y = main_pos.y + 8;
+                    let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                    let _ = unlock_win.show();
+                    let _ = unlock_win.set_always_on_top(true);
+                }
+            } else {
+                let _ = unlock_win.hide();
+            }
+        }
     }
     Ok(())
 }
@@ -377,6 +431,14 @@ fn dock_window(app: AppHandle, position: String) -> Result<(), String> {
             cfg.window_y = Some(new_y);
             let _ = save_config(&cfg);
             let _ = app.emit("config://updated", &cfg);
+
+            if cfg.click_through {
+                if let Some(unlock_win) = app.get_webview_window("unlock") {
+                    let badge_x = new_x + win_w as i32 - 44;
+                    let badge_y = new_y + 8;
+                    let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                }
+            }
         }
     }
     Ok(())
@@ -527,6 +589,19 @@ pub fn run() {
                 if let (Some(w), Some(h)) = (cfg.window_width, cfg.window_height) {
                     let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: w, height: h }));
                 }
+
+                if cfg.click_through {
+                    let _ = main_window.set_ignore_cursor_events(true);
+                    if let Some(unlock_win) = app.get_webview_window("unlock") {
+                        let cur_pos = main_window.outer_position().unwrap_or_default();
+                        let cur_size = main_window.outer_size().unwrap_or_default();
+                        let badge_x = cur_pos.x + cur_size.width as i32 - 44;
+                        let badge_y = cur_pos.y + 8;
+                        let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                        let _ = unlock_win.show();
+                        let _ = unlock_win.set_always_on_top(true);
+                    }
+                }
             }
 
             // Listen to track changed event to automatically resolve lyrics
@@ -575,7 +650,7 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     let label = window.label();
-                    if label == "settings" || label == "search" || label == "main" {
+                    if label == "settings" || label == "search" || label == "main" || label == "unlock" {
                         api.prevent_close();
                         let _ = window.hide();
                     }
@@ -587,6 +662,16 @@ pub fn run() {
                             cfg.window_x = Some(pos.x);
                             cfg.window_y = Some(pos.y);
                             let _ = save_config(&cfg);
+
+                            if cfg.click_through {
+                                if let Some(unlock_win) = window.app_handle().get_webview_window("unlock") {
+                                    if let Ok(size) = window.outer_size() {
+                                        let badge_x = pos.x + size.width as i32 - 44;
+                                        let badge_y = pos.y + 8;
+                                        let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -597,6 +682,16 @@ pub fn run() {
                             cfg.window_width = Some(size.width);
                             cfg.window_height = Some(size.height);
                             let _ = save_config(&cfg);
+
+                            if cfg.click_through {
+                                if let Some(unlock_win) = window.app_handle().get_webview_window("unlock") {
+                                    if let Ok(pos) = window.outer_position() {
+                                        let badge_x = pos.x + size.width as i32 - 44;
+                                        let badge_y = pos.y + 8;
+                                        let _ = unlock_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: badge_x, y: badge_y }));
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -102,6 +102,14 @@ impl AimpReader {
                 }
             }
 
+            // Try Winamp v1.x as fallback
+            let hwnd3 = FindWindowW(w!("Winamp v1.x"), windows::core::PCWSTR::null());
+            if let Ok(h) = hwnd3 {
+                if !h.0.is_null() {
+                    return Some(h);
+                }
+            }
+
             None
         }
     }
@@ -334,11 +342,7 @@ pub fn start_aimp_polling_task(
 
 pub fn seek_track(position_ms: u32) -> Result<(), String> {
     unsafe {
-        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
-            .map_err(|e| e.to_string())?;
-        if hwnd.0.is_null() {
-            return Err("AIMP window not found".to_string());
-        }
+        let hwnd = AimpReader::find_aimp_window().ok_or_else(|| "AIMP window not found".to_string())?;
         SendMessageW(
             hwnd,
             WM_AIMP_PROPERTY,
@@ -351,11 +355,7 @@ pub fn seek_track(position_ms: u32) -> Result<(), String> {
 
 pub fn send_aimp_command(cmd: &str) -> Result<(), String> {
     unsafe {
-        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
-            .map_err(|e| e.to_string())?;
-        if hwnd.0.is_null() {
-            return Err("AIMP window not found".to_string());
-        }
+        let hwnd = AimpReader::find_aimp_window().ok_or_else(|| "AIMP window not found".to_string())?;
         let code = match cmd {
             "play" => AIMP_CMD_PLAY,
             "playpause" | "toggle" => AIMP_CMD_PLAYPAUSE,
@@ -366,17 +366,31 @@ pub fn send_aimp_command(cmd: &str) -> Result<(), String> {
             _ => return Err(format!("Unknown command: {}", cmd)),
         };
         SendMessageW(hwnd, WM_AIMP_COMMAND, WPARAM(code), LPARAM(0));
+
+        // If Winamp emulation window is also available, send Winamp WM_COMMAND as additional safeguard
+        let winamp_cmd: usize = match cmd {
+            "play" => 40045,
+            "playpause" | "toggle" => 40045,
+            "pause" => 40046,
+            "stop" => 40047,
+            "next" => 40048,
+            "prev" => 40044,
+            _ => 0,
+        };
+        if winamp_cmd != 0 {
+            if let Ok(winamp_hwnd) = FindWindowW(w!("Winamp v1.x"), windows::core::PCWSTR::null()) {
+                if !winamp_hwnd.0.is_null() && winamp_hwnd != hwnd {
+                    let _ = SendMessageW(winamp_hwnd, 0x0111, WPARAM(winamp_cmd), LPARAM(0));
+                }
+            }
+        }
         Ok(())
     }
 }
 
 pub fn set_aimp_volume(volume: u32) -> Result<(), String> {
     unsafe {
-        let hwnd = FindWindowW(w!("AIMPRemoteAccessClass"), w!("AIMPRemoteAccessClass"))
-            .map_err(|e| e.to_string())?;
-        if hwnd.0.is_null() {
-            return Err("AIMP window not found".to_string());
-        }
+        let hwnd = AimpReader::find_aimp_window().ok_or_else(|| "AIMP window not found".to_string())?;
         let clamped = volume.min(100);
         SendMessageW(
             hwnd,

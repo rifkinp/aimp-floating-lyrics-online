@@ -64,6 +64,8 @@ export interface AppConfig {
   enableGlassmorphism?: boolean;
   dockPosition?: 'none' | 'bottom-taskbar' | 'top-screen';
   targetMonitor?: number | null;
+  enabledSources?: string[];
+  sourcePriority?: string[];
 }
 
 export interface LrclibRecord {

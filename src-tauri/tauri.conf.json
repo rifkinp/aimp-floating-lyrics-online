@@ -54,6 +54,19 @@
         "resizable": true,
         "center": true,
         "visible": false
+      },
+      {
+        "label": "unlock",
+        "title": "AIMP Lyrics Unlock",
+        "width": 38,
+        "height": 38,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": false
       }
     ],
     "security": {

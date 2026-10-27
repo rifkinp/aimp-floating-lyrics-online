@@ -168,8 +168,91 @@ const resetDefaults = () => {
     textAlign: 'center',
     saveToAudioFolder: true,
     closeWithAimp: false,
+    enabledSources: ['local', 'lrclib', 'netease', 'lrcred', 'cache'],
+    sourcePriority: ['local', 'lrclib', 'netease', 'lrcred', 'cache'],
   };
   commitConfig();
+};
+
+const allProviders = [
+  {
+    id: 'local',
+    name: 'Folder Audio Lokal (.lrc)',
+    badge: 'Local',
+    desc: 'Lirik dari file .lrc di folder lagu yang sama',
+    iconColor: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
+  },
+  {
+    id: 'lrclib',
+    name: 'LRCLIB Online Database',
+    badge: 'Global',
+    desc: 'Database lirik sinkron terbuka resmi (lrclib.net)',
+    iconColor: 'text-sky-400 border-sky-500/40 bg-sky-500/10',
+  },
+  {
+    id: 'netease',
+    name: 'NetEase Cloud Music',
+    badge: 'Bilingual & Romaji',
+    desc: 'Database musik Asia, Romaji, Pinyin, & Terjemahan',
+    iconColor: 'text-rose-400 border-rose-500/40 bg-rose-500/10',
+  },
+  {
+    id: 'lrcred',
+    name: 'LRC.RED Provider',
+    badge: 'Word Sync',
+    desc: 'Penyedia lirik sinkronisasi presisi kata (lrc.red)',
+    iconColor: 'text-purple-400 border-purple-500/40 bg-purple-500/10',
+  },
+  {
+    id: 'cache',
+    name: 'Offline AppData Cache',
+    badge: 'Offline',
+    desc: 'Lirik yang pernah diunduh sebelumnya di cache aplikasi',
+    iconColor: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10',
+  },
+];
+
+const toggleSource = (sourceId: string) => {
+  if (!localConfig.value.enabledSources) {
+    localConfig.value.enabledSources = ['local', 'lrclib', 'netease', 'lrcred', 'cache'];
+  }
+  const idx = localConfig.value.enabledSources.indexOf(sourceId);
+  if (idx >= 0) {
+    // Keep at least one source enabled
+    if (localConfig.value.enabledSources.length > 1) {
+      localConfig.value.enabledSources.splice(idx, 1);
+    }
+  } else {
+    localConfig.value.enabledSources.push(sourceId);
+  }
+  handleSliderChange();
+};
+
+const isSourceEnabled = (sourceId: string) => {
+  if (!localConfig.value.enabledSources) return true;
+  return localConfig.value.enabledSources.includes(sourceId);
+};
+
+const moveSourcePriority = (sourceId: string, direction: 'up' | 'down') => {
+  if (!localConfig.value.sourcePriority) {
+    localConfig.value.sourcePriority = ['local', 'lrclib', 'netease', 'lrcred', 'cache'];
+  }
+  const list = [...localConfig.value.sourcePriority];
+  const idx = list.indexOf(sourceId);
+  if (idx < 0) return;
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= list.length) return;
+
+  const [moved] = list.splice(idx, 1);
+  list.splice(targetIdx, 0, moved);
+  localConfig.value.sourcePriority = list;
+  handleSliderChange();
+};
+
+const resetSourcePriority = () => {
+  localConfig.value.enabledSources = ['local', 'lrclib', 'netease', 'lrcred', 'cache'];
+  localConfig.value.sourcePriority = ['local', 'lrclib', 'netease', 'lrcred', 'cache'];
+  handleSliderChange();
 };
 </script>
 
@@ -600,6 +683,90 @@ const resetDefaults = () => {
           type="checkbox"
           class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer"
         />
+      </div>
+
+      <!-- Lyrics Sources & Priority Selection -->
+      <div class="pt-3 border-t border-slate-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-slate-200 text-xs">Pilihan Sumber & Prioritas Lirik (Lyrics Sources)</div>
+            <div class="text-[11px] text-slate-400">Aktifkan sumber dan atur urutan prioritas pencarian lirik</div>
+          </div>
+          <button
+            type="button"
+            @click="resetSourcePriority"
+            class="text-[10px] text-sky-400 hover:text-sky-300 underline font-medium transition"
+          >
+            Reset Prioritas
+          </button>
+        </div>
+
+        <div class="space-y-1.5 pt-1">
+          <div
+            v-for="(srcId, pIdx) in (localConfig.sourcePriority || ['local', 'lrclib', 'netease', 'lrcred', 'cache'])"
+            :key="srcId"
+            class="flex items-center justify-between p-2 rounded-xl border transition-all"
+            :class="isSourceEnabled(srcId)
+              ? 'bg-slate-800/80 border-slate-700/80 text-white'
+              : 'bg-slate-800/30 border-slate-800 text-slate-500 opacity-60'"
+          >
+            <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2">
+              <span
+                class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                :class="pIdx === 0
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                  : 'bg-slate-700 text-slate-300'"
+              >
+                {{ pIdx + 1 }}
+              </span>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center space-x-1.5">
+                  <span class="font-semibold text-xs truncate">
+                    {{ allProviders.find(p => p.id === srcId)?.name || srcId }}
+                  </span>
+                  <span
+                    class="text-[9px] px-1.5 py-0.5 rounded border uppercase font-mono font-bold"
+                    :class="allProviders.find(p => p.id === srcId)?.iconColor"
+                  >
+                    {{ allProviders.find(p => p.id === srcId)?.badge }}
+                  </span>
+                </div>
+                <div class="text-[10px] text-slate-400 truncate">
+                  {{ allProviders.find(p => p.id === srcId)?.desc }}
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-1 flex-shrink-0">
+              <button
+                type="button"
+                :disabled="pIdx === 0"
+                @click="moveSourcePriority(srcId, 'up')"
+                class="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent transition text-slate-300 active:scale-90"
+                title="Geser Prioritas Naik"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                :disabled="pIdx === (localConfig.sourcePriority?.length || 5) - 1"
+                @click="moveSourcePriority(srcId, 'down')"
+                class="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent transition text-slate-300 active:scale-90"
+                title="Geser Prioritas Turun"
+              >
+                ▼
+              </button>
+              <input
+                type="checkbox"
+                :checked="isSourceEnabled(srcId)"
+                @change="toggleSource(srcId)"
+                class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer ml-1"
+                title="Aktifkan / Nonaktifkan Sumber"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- LRCLIB Application ID -->
@@ -1045,7 +1212,91 @@ const resetDefaults = () => {
           />
         </div>
 
-        <!-- LRCLIB Application ID -->
+        <!-- Lyrics Sources & Priority Selection -->
+      <div class="pt-3 border-t border-slate-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-semibold text-slate-200 text-xs">Pilihan Sumber & Prioritas Lirik (Lyrics Sources)</div>
+            <div class="text-[11px] text-slate-400">Aktifkan sumber dan atur urutan prioritas pencarian lirik</div>
+          </div>
+          <button
+            type="button"
+            @click="resetSourcePriority"
+            class="text-[10px] text-sky-400 hover:text-sky-300 underline font-medium transition"
+          >
+            Reset Prioritas
+          </button>
+        </div>
+
+        <div class="space-y-1.5 pt-1">
+          <div
+            v-for="(srcId, pIdx) in (localConfig.sourcePriority || ['local', 'lrclib', 'netease', 'lrcred', 'cache'])"
+            :key="srcId"
+            class="flex items-center justify-between p-2 rounded-xl border transition-all"
+            :class="isSourceEnabled(srcId)
+              ? 'bg-slate-800/80 border-slate-700/80 text-white'
+              : 'bg-slate-800/30 border-slate-800 text-slate-500 opacity-60'"
+          >
+            <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2">
+              <span
+                class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                :class="pIdx === 0
+                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                  : 'bg-slate-700 text-slate-300'"
+              >
+                {{ pIdx + 1 }}
+              </span>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center space-x-1.5">
+                  <span class="font-semibold text-xs truncate">
+                    {{ allProviders.find(p => p.id === srcId)?.name || srcId }}
+                  </span>
+                  <span
+                    class="text-[9px] px-1.5 py-0.5 rounded border uppercase font-mono font-bold"
+                    :class="allProviders.find(p => p.id === srcId)?.iconColor"
+                  >
+                    {{ allProviders.find(p => p.id === srcId)?.badge }}
+                  </span>
+                </div>
+                <div class="text-[10px] text-slate-400 truncate">
+                  {{ allProviders.find(p => p.id === srcId)?.desc }}
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-1 flex-shrink-0">
+              <button
+                type="button"
+                :disabled="pIdx === 0"
+                @click="moveSourcePriority(srcId, 'up')"
+                class="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent transition text-slate-300 active:scale-90"
+                title="Geser Prioritas Naik"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                :disabled="pIdx === (localConfig.sourcePriority?.length || 5) - 1"
+                @click="moveSourcePriority(srcId, 'down')"
+                class="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10 disabled:opacity-20 disabled:hover:bg-transparent transition text-slate-300 active:scale-90"
+                title="Geser Prioritas Turun"
+              >
+                ▼
+              </button>
+              <input
+                type="checkbox"
+                :checked="isSourceEnabled(srcId)"
+                @change="toggleSource(srcId)"
+                class="w-4 h-4 rounded text-sky-500 accent-sky-500 bg-slate-800 border-slate-700 cursor-pointer ml-1"
+                title="Aktifkan / Nonaktifkan Sumber"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LRCLIB Application ID -->
         <div class="pt-2 border-t border-slate-800 space-y-1">
           <div class="flex items-center justify-between">
             <span class="font-semibold text-slate-200">LRCLIB Application ID</span>
