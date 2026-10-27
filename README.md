@@ -24,7 +24,8 @@ Versi rilis siap pakai (*portable*, tanpa perlu instalasi rumit) dapat langsung 
 
 | Versi | Tipe Berkas | Target Sistem | Tautan Unduhan Langsung | Ukuran |
 | :--- | :--- | :--- | :--- | :--- |
-| **v0.1.0 (Latest)** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 **AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.1.0/AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip) | ~8.3 MB |
+| **v0.2.0 (Latest)** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 **AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip**](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.2.0/AIMP-Floating-Lyrics-v0.2.0-windows-x64.zip) | ~8.3 MB |
+| **v0.1.0** | Portable Archive (`.zip`) | Windows 10 & 11 (64-bit) | [📦 AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip](https://github.com/rifkinp/aimp-floating-lyrics-online/releases/download/v0.1.0/AIMP-Floating-Lyrics-v0.1.0-windows-x64.zip) | ~8.3 MB |
 
 > [!TIP]
 > **Quick Start:** Cukup unduh paket zip di atas, ekstrak ke folder mana saja di komputer Anda, lalu jalankan `AIMP Floating Lyrics.exe`. Semua dependensi (termasuk WebView2Loader dan konfigurasi User-Agent) sudah siap digunakan!

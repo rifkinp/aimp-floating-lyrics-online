@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USER_AGENT: &str = "AIMP-Floating-Lyrics-Online v0.1.0 (https://github.com/local/aimp-floating-lyrics)";
-const LRCLIB_CLIENT: &str = "AIMP-Floating-Lyrics-Online v0.1.0";
+const USER_AGENT: &str = "AIMP-Floating-Lyrics-Online v0.2.0 (https://github.com/rifkinp/aimp-floating-lyrics-online)";
+const LRCLIB_CLIENT: &str = "AIMP-Floating-Lyrics-Online v0.2.0";
 const API_BASE: &str = "https://lrclib.net/api";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

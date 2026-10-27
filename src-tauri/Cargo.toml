@@ -1,6 +1,6 @@
 [package]
 name = "aimp-floating-lyrics"
-version = "0.1.0"
+version = "0.2.0"
 description = "AIMP Floating Lyrics Online"
 authors = ["you"]
 edition = "2021"
